@@ -1,0 +1,8 @@
+config:
+  azure-native:location: westeurope
+  pre-talx-tix-azure:prefix: pretalxtix
+  pre-talx-tix-azure:pretixImageTag: stable
+  pre-talx-tix-azure:pretalxImageTag: latest
+  pre-talx-tix-azure:pretixUrl: https://tickets.example.com
+  pre-talx-tix-azure:pretalxUrl: https://cfp.example.com
+  pre-talx-tix-azure:mailFrom: noreply@example.com

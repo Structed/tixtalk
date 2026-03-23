@@ -1,0 +1,3 @@
+name: pre-talx-tix-azure
+runtime: dotnet
+description: Fully automated deployment of Pretix (ticketing) and Pretalx (CfP/scheduling) on Azure Container Apps.
