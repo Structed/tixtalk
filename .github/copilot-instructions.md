@@ -39,17 +39,23 @@ A single Redis instance is shared; apps are isolated by database number:
 All scripts in `scripts/` are bash (runs on the Linux VPS):
 
 - `setup.sh` — install Docker, configure firewall (run once)
-- `deploy.sh` — generate secrets + start services (run once)
+- `deploy.sh` — generate secrets, create DNS records, start services (run once)
 - `update.sh` — pull latest images + restart
 - `backup.sh` — pg_dump both databases (supports `--install-cron`)
 - `restore.sh` — restore from a backup file
 - `init-db.sh` — PostgreSQL entrypoint script (creates both databases on first start)
+- `cloudflare-dns.sh` — create/update Cloudflare A records via API (called by deploy.sh)
 
 ### Env var formats
 
 - **Pretix**: `PRETIX_{SECTION}_{KEY}` — e.g., `PRETIX_DATABASE_HOST`
 - **Pretalx**: `PRETALX_{SECTION}_{KEY}` — e.g., `PRETALX_DATABASE_HOST`
 
-### Custom domains
+### TLS and DNS
 
-Caddy handles TLS automatically via Let's Encrypt. The user sets `DOMAIN` in `.env` and points `tickets.{DOMAIN}` + `talks.{DOMAIN}` A records to the server IP. No manual cert management needed.
+Two TLS modes controlled by `CLOUDFLARE_DNS_CHALLENGE` in `.env`:
+
+- **HTTP challenge** (`false`, default) — standard `caddy:2-alpine` image, validates via port 80. Uses `caddy/Caddyfile`. Cloudflare proxy must be off (grey-cloud).
+- **DNS challenge** (`true`) — custom Caddy image built from `caddy/Dockerfile` with cloudflare plugin. Uses `caddy/Caddyfile.dns`. Works with Cloudflare proxy on (orange-cloud).
+
+When DNS challenge is enabled, `deploy.sh` and `update.sh` use the compose override: `docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml`.

@@ -28,10 +28,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "Pulling latest images..."
-docker compose pull
+COMPOSE_CMD="docker compose"
+if [ "${CLOUDFLARE_DNS_CHALLENGE:-false}" = "true" ]; then
+    COMPOSE_CMD="docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml"
+fi
+$COMPOSE_CMD pull --ignore-buildable 2>/dev/null || $COMPOSE_CMD pull 2>/dev/null || true
 
 echo "Restarting services..."
-docker compose up -d
+$COMPOSE_CMD up -d --build
 
 echo ""
 echo "=== Update complete ==="

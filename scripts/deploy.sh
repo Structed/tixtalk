@@ -1,6 +1,6 @@
 #!/bin/bash
 # First-time deployment of Pretix + Pretalx.
-# Generates secrets, validates config, and starts all services.
+# Generates secrets, validates config, sets up DNS, and starts all services.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -55,12 +55,31 @@ if [ "$CHANGED" = true ]; then
     echo ""
 fi
 
+# Set up Cloudflare DNS records if API token is configured
+if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+    echo "Setting up Cloudflare DNS..."
+    bash "$SCRIPT_DIR/cloudflare-dns.sh"
+    echo ""
+else
+    echo "No CLOUDFLARE_API_TOKEN set — make sure DNS records exist:"
+    echo "  tickets.${DOMAIN} → $(curl -s -4 ifconfig.me 2>/dev/null || echo '<server-ip>')"
+    echo "  talks.${DOMAIN}   → $(curl -s -4 ifconfig.me 2>/dev/null || echo '<server-ip>')"
+    echo ""
+fi
+
+# Determine compose command based on TLS mode
+COMPOSE_CMD="docker compose"
+if [ "${CLOUDFLARE_DNS_CHALLENGE:-false}" = "true" ]; then
+    echo "Using Cloudflare DNS challenge for TLS (building custom Caddy image)..."
+    COMPOSE_CMD="docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml"
+fi
+
 # Pull images and start
 echo "Pulling container images..."
-docker compose pull --quiet
+$COMPOSE_CMD pull --quiet --ignore-buildable 2>/dev/null || $COMPOSE_CMD pull --quiet 2>/dev/null || true
 
 echo "Starting services..."
-docker compose up -d
+$COMPOSE_CMD up -d --build
 
 echo ""
 echo "=== Deployment complete ==="

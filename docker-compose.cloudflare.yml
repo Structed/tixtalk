@@ -1,0 +1,14 @@
+# Compose override for Cloudflare DNS challenge TLS.
+# Used automatically by deploy.sh when CLOUDFLARE_DNS_CHALLENGE=true.
+# Manual usage: docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d
+services:
+  caddy:
+    build: ./caddy
+    image: caddy-cloudflare:local
+    volumes:
+      - ./caddy/Caddyfile.dns:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      DOMAIN: ${DOMAIN}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}

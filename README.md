@@ -24,7 +24,9 @@ Estimated cost: **~€5-7/month** (Hetzner CX33: 4 vCPU, 8 GB RAM, 80 GB SSD).
 
 ### 1. Set up DNS
 
-Point two A records to your server's IP address:
+**Option A — Cloudflare (automated):** Add your Cloudflare API token and Zone ID to `.env` and `deploy.sh` will create the DNS records automatically.
+
+**Option B — Manual:** Point two A records to your server's IP address:
 
 ```
 tickets.yourdomain.com → <server-ip>
@@ -44,7 +46,7 @@ sudo ./scripts/setup.sh
 
 # Create your configuration
 cp .env.example .env
-nano .env  # Set DOMAIN, SMTP settings
+nano .env  # Set DOMAIN, Cloudflare (optional), SMTP settings
 ```
 
 ### 3. Deploy
@@ -55,6 +57,7 @@ nano .env  # Set DOMAIN, SMTP settings
 
 This will:
 - Generate secure random passwords for the database and app secret keys
+- Create Cloudflare DNS records (if API token is set)
 - Pull all container images
 - Start everything
 
@@ -120,6 +123,38 @@ Both apps are multi-tenant — create new events in the web UI each year. No inf
 - **Pretix**: `https://tickets.yourdomain.com/<organizer>/<year>/`
 - **Pretalx**: `https://talks.yourdomain.com/<event-slug>/`
 
+## Cloudflare Integration
+
+### Setup
+
+1. Go to [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens)
+2. Create a token with **Zone > DNS > Edit** permission for your domain
+3. Copy your **Zone ID** from the domain's Overview page in Cloudflare
+4. Add both to `.env`:
+
+```bash
+CLOUDFLARE_API_TOKEN=your-token-here
+CLOUDFLARE_ZONE_ID=your-zone-id-here
+```
+
+### TLS modes
+
+| Mode | `CLOUDFLARE_DNS_CHALLENGE` | Cloudflare proxy | How it works |
+|------|---------------------------|-----------------|--------------|
+| **HTTP challenge** (default) | `false` | Off (grey cloud) | Caddy validates via port 80. Simpler, standard image. |
+| **DNS challenge** | `true` | On (orange cloud) | Caddy validates via Cloudflare API. Hides server IP, full CDN. |
+
+To use DNS challenge:
+```bash
+CLOUDFLARE_DNS_CHALLENGE=true
+```
+
+This builds a custom Caddy image with the Cloudflare plugin (first deploy takes ~1 min longer).
+
+### Manual DNS management
+
+You can also run `scripts/cloudflare-dns.sh` independently to create/update DNS records without redeploying.
+
 ## Configuration Reference
 
 All configuration is in `.env`:
@@ -127,6 +162,9 @@ All configuration is in `.env`:
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `DOMAIN` | Yes | — | Your domain (e.g., `yourdomain.com`) |
+| `CLOUDFLARE_API_TOKEN` | No | — | Cloudflare API token (automates DNS) |
+| `CLOUDFLARE_ZONE_ID` | No | — | Cloudflare Zone ID |
+| `CLOUDFLARE_DNS_CHALLENGE` | No | `false` | Use DNS challenge for TLS (enables proxy) |
 | `DB_USER` | No | `pretalxtix` | PostgreSQL username |
 | `DB_PASSWORD` | No | auto-generated | PostgreSQL password |
 | `PRETIX_SECRET_KEY` | No | auto-generated | Pretix secret key |

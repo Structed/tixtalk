@@ -1,0 +1,13 @@
+tickets.{$DOMAIN} {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+    reverse_proxy pretix:80
+}
+
+talks.{$DOMAIN} {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+    reverse_proxy pretalx:80
+}
