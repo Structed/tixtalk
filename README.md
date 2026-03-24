@@ -14,6 +14,25 @@ Self-hosted [pretix](https://pretix.eu/) (ticketing) and [pretalx](https://preta
 
 Estimated cost: **~€5-7/month** (Hetzner CX33: 4 vCPU, 8 GB RAM, 80 GB SSD).
 
+## Management CLI
+
+Everything is managed through a single `./manage.sh` script:
+
+```bash
+./manage.sh              # Interactive menu
+./manage.sh status       # Service status + URLs
+./manage.sh update       # Pull latest images + restart
+./manage.sh logs pretix  # Tail pretix logs
+./manage.sh backup       # Backup databases
+./manage.sh help         # All commands
+```
+
+**Remote management** from your home PC:
+```bash
+./manage.sh remote root@your-server-ip          # Interactive menu over SSH
+./manage.sh remote root@your-server-ip status   # Direct command over SSH
+```
+
 ## Prerequisites
 
 - A VPS running Ubuntu 22.04+ or Debian 12+ (2+ GB RAM minimum, 4+ GB recommended)
@@ -42,7 +61,7 @@ git clone <this-repo>
 cd pre-talx-tix-azure
 
 # Install Docker if needed
-sudo ./scripts/setup.sh
+./manage.sh setup
 
 # Create your configuration
 cp .env.example .env
@@ -52,7 +71,7 @@ nano .env  # Set DOMAIN, Cloudflare (optional), SMTP settings
 ### 3. Deploy
 
 ```bash
-./scripts/deploy.sh
+./manage.sh deploy
 ```
 
 This will:
@@ -83,13 +102,13 @@ Both apps have web-based setup wizards on first visit.
 
 ```bash
 # Pull latest images and restart
-./scripts/update.sh
+./manage.sh update
 
 # Pin a specific version
-./scripts/update.sh --pretix 2025.1.0
+./manage.sh update --pretix 2025.1.0
 
 # Update both
-./scripts/update.sh --pretix 2025.1.0 --pretalx 2025.1.0
+./manage.sh update --pretix 2025.1.0 --pretalx 2025.1.0
 ```
 
 ## Backups
@@ -97,7 +116,7 @@ Both apps have web-based setup wizards on first visit.
 ### Manual backup
 
 ```bash
-./scripts/backup.sh
+./manage.sh backup
 ```
 
 Saves gzipped SQL dumps to `backups/` with timestamps.
@@ -105,7 +124,7 @@ Saves gzipped SQL dumps to `backups/` with timestamps.
 ### Automatic daily backups
 
 ```bash
-./scripts/backup.sh --install-cron
+./manage.sh backup --install-cron
 ```
 
 Runs at 3:00 AM daily. Backups older than 30 days are auto-deleted.
@@ -113,7 +132,11 @@ Runs at 3:00 AM daily. Backups older than 30 days are auto-deleted.
 ### Restore from backup
 
 ```bash
-./scripts/restore.sh backups/pretix_20260324-030000.sql.gz pretix
+# Interactive (lists available backups):
+./manage.sh restore
+
+# Direct:
+./manage.sh restore backups/pretix_20260324-030000.sql.gz pretix
 ```
 
 ## Yearly Events
