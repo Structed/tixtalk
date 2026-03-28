@@ -1,0 +1,3 @@
+name: pre-talx-tix
+runtime: dotnet
+description: Provisions an Azure Ubuntu VM with Docker and docker-compose for pretix + pretalx.

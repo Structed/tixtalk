@@ -257,3 +257,66 @@ docker compose down && docker compose up -d
 ```bash
 docker compose down -v  # -v removes all data volumes
 ```
+
+## Pulumi Azure VM Deployment (Infrastructure as Code)
+
+The `infra/` directory contains a Pulumi C# project that provisions a complete Azure VM environment and automatically bootstraps the docker-compose stack via cloud-init.
+
+### What It Provisions
+
+| Resource | Details |
+|----------|---------|
+| **Resource Group** | Logical container for all Azure resources |
+| **Virtual Network** | 10.0.0.0/16 with a default subnet |
+| **Network Security Group** | Allows SSH (22), HTTP (80), HTTPS (443), HTTP/3 (443/UDP) |
+| **Public IP** | Static IP for DNS |
+| **Ubuntu 24.04 LTS VM** | Standard_B2s (2 vCPU, 4 GB RAM), 64 GB OS disk |
+| **Cloud-init** | Installs Docker, clones repo, writes `.env`, starts services |
+
+### Prerequisites
+
+- [.NET 8+ SDK](https://dotnet.microsoft.com/download)
+- [Pulumi CLI](https://www.pulumi.com/docs/install/)
+- An Azure subscription (logged in via `az login` or Pulumi service account)
+
+### Deploy
+
+```bash
+cd infra
+
+# Initialize stack (first time only)
+pulumi stack init dev
+
+# Set required config
+pulumi config set pre-talx-tix:domain yourdomain.com
+pulumi config set pre-talx-tix:sshPublicKey "$(cat ~/.ssh/id_rsa.pub)"
+
+# Optional config
+pulumi config set pre-talx-tix:vmSize Standard_B2s
+pulumi config set pre-talx-tix:cloudflareApiToken YOUR_TOKEN --secret
+pulumi config set pre-talx-tix:cloudflareZoneId YOUR_ZONE_ID
+pulumi config set pre-talx-tix:smtpHost smtp.example.com
+pulumi config set pre-talx-tix:smtpUser user@example.com
+pulumi config set pre-talx-tix:smtpPassword YOUR_PASSWORD --secret
+pulumi config set pre-talx-tix:mailFrom noreply@yourdomain.com
+
+# Deploy
+pulumi up
+```
+
+### Outputs
+
+After deployment, Pulumi displays:
+
+| Output | Description |
+|--------|-------------|
+| `vmPublicIp` | VM public IP address |
+| `sshCommand` | Ready-to-use SSH command |
+| `pretixUrl` | `https://tickets.<domain>` |
+| `pretalxUrl` | `https://talks.<domain>` |
+
+### Tear Down
+
+```bash
+pulumi destroy
+```

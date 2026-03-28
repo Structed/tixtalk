@@ -12,6 +12,8 @@ cli/bin/
 cli/obj/
 build/bin/
 build/obj/
+infra/bin/
+infra/obj/
 output/
 *.user
 

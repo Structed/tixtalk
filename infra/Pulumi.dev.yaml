@@ -1,0 +1,19 @@
+config:
+  azure-native:location: westeurope
+  pre-talx-tix:prefix: pretalxtix
+  pre-talx-tix:vmSize: Standard_B2s
+  pre-talx-tix:pretixImageTag: stable
+  pre-talx-tix:pretalxImageTag: latest
+  pre-talx-tix:mailFrom: noreply@example.com
+  # Required — set before running `pulumi up`:
+  # pre-talx-tix:domain: yourdomain.com
+  # pre-talx-tix:sshPublicKey: ssh-rsa AAAA...
+  # Optional — Cloudflare DNS automation:
+  # pre-talx-tix:cloudflareApiToken: <secret>
+  # pre-talx-tix:cloudflareZoneId: <zone-id>
+  # pre-talx-tix:cloudflareDnsChallenge: "false"
+  # Optional — SMTP:
+  # pre-talx-tix:smtpHost: smtp.example.com
+  # pre-talx-tix:smtpPort: "587"
+  # pre-talx-tix:smtpUser: user
+  # pre-talx-tix:smtpPassword: <secret>
