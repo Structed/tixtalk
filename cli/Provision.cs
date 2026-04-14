@@ -1,0 +1,371 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using Spectre.Console;
+
+namespace PreTalxTix.Cli;
+
+public static class Provision
+{
+    private static readonly string InfraDir = Path.Combine(
+        FindRepoRoot() ?? ".", "infra");
+
+    public static int Run()
+    {
+        AnsiConsole.Write(new Rule("[blue]Provision Azure VM[/]").RuleStyle("blue"));
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("This wizard will create an Azure VM and deploy pretix + pretalx.");
+        AnsiConsole.MarkupLine("Prerequisites: [yellow]Pulumi CLI[/], [yellow].NET 8+ SDK[/], [yellow]Azure CLI[/] (logged in)");
+        AnsiConsole.WriteLine();
+
+        // Check prerequisites
+        if (!CheckPrerequisite("pulumi", "--version", "Pulumi CLI"))
+            return 1;
+
+        // Gather configuration
+        var domain = AnsiConsole.Ask<string>("Your [green]domain[/] (e.g., yourdomain.com):");
+
+        var sshKeyPath = DetectSshKey();
+        sshKeyPath = AnsiConsole.Ask("SSH public key file:", sshKeyPath);
+        var sshPublicKey = ReadSshPublicKey(sshKeyPath);
+        if (sshPublicKey == null) return 1;
+
+        var region = AnsiConsole.Ask("Azure [green]region[/]:", "westeurope");
+
+        var vmSize = AnsiConsole.Ask("VM size:", "Standard_B2s");
+
+        // Optional: SMTP
+        var configureSMTP = AnsiConsole.Confirm("Configure SMTP (email) now?", false);
+        string smtpHost = "", smtpUser = "", smtpPassword = "", mailFrom = "";
+        int smtpPort = 587;
+        if (configureSMTP)
+        {
+            smtpHost = AnsiConsole.Ask<string>("SMTP host:");
+            smtpPort = AnsiConsole.Ask("SMTP port:", 587);
+            smtpUser = AnsiConsole.Ask<string>("SMTP user:");
+            smtpPassword = AnsiConsole.Prompt(
+                new TextPrompt<string>("SMTP password:").Secret());
+            mailFrom = AnsiConsole.Ask<string>("Mail from address:");
+        }
+
+        // Optional: Cloudflare
+        var configureCloudflare = AnsiConsole.Confirm("Configure Cloudflare DNS automation?", false);
+        string cfToken = "", cfZoneId = "";
+        bool cfDnsChallenge = false;
+        if (configureCloudflare)
+        {
+            cfToken = AnsiConsole.Prompt(
+                new TextPrompt<string>("Cloudflare API token:").Secret());
+            cfZoneId = AnsiConsole.Ask<string>("Cloudflare Zone ID:");
+            cfDnsChallenge = AnsiConsole.Confirm("Use DNS challenge for TLS (orange-cloud proxy)?", false);
+        }
+
+        // Summary
+        AnsiConsole.WriteLine();
+        AnsiConsole.Write(new Rule("[yellow]Summary[/]").RuleStyle("yellow"));
+
+        var summaryTable = new Table().Border(TableBorder.Rounded);
+        summaryTable.AddColumn("Setting");
+        summaryTable.AddColumn("Value");
+        summaryTable.AddRow("Domain", domain);
+        summaryTable.AddRow("Region", region);
+        summaryTable.AddRow("VM Size", vmSize);
+        summaryTable.AddRow("SSH Key", sshKeyPath);
+        summaryTable.AddRow("SMTP", configureSMTP ? smtpHost : "[grey]not configured[/]");
+        summaryTable.AddRow("Cloudflare", configureCloudflare ? "enabled" : "[grey]not configured[/]");
+        AnsiConsole.Write(summaryTable);
+
+        AnsiConsole.WriteLine();
+        if (!AnsiConsole.Confirm("Proceed with provisioning?", true))
+        {
+            AnsiConsole.MarkupLine("[yellow]Aborted.[/]");
+            return 0;
+        }
+
+        // Initialize Pulumi stack
+        AnsiConsole.WriteLine();
+        AnsiConsole.Write(new Rule("[blue]Step 1/3: Configuring Pulumi[/]").RuleStyle("blue"));
+
+        if (RunPulumi("stack init dev --non-interactive", allowFailure: true) != 0)
+        {
+            // Stack may already exist — select it
+            RunPulumi("stack select dev");
+        }
+
+        // Set config values
+        SetConfig("azure-native:location", region);
+        SetConfig("pre-talx-tix:domain", domain);
+        SetConfig("pre-talx-tix:sshPublicKey", sshPublicKey);
+        SetConfig("pre-talx-tix:vmSize", vmSize);
+
+        if (configureSMTP)
+        {
+            SetConfig("pre-talx-tix:smtpHost", smtpHost);
+            SetConfig("pre-talx-tix:smtpPort", smtpPort.ToString());
+            SetConfig("pre-talx-tix:smtpUser", smtpUser);
+            SetConfig("pre-talx-tix:smtpPassword", smtpPassword, secret: true);
+            SetConfig("pre-talx-tix:mailFrom", mailFrom);
+        }
+
+        if (configureCloudflare)
+        {
+            SetConfig("pre-talx-tix:cloudflareApiToken", cfToken, secret: true);
+            SetConfig("pre-talx-tix:cloudflareZoneId", cfZoneId);
+            if (cfDnsChallenge)
+                SetConfig("pre-talx-tix:cloudflareDnsChallenge", "true");
+        }
+
+        // Run pulumi up
+        AnsiConsole.WriteLine();
+        AnsiConsole.Write(new Rule("[blue]Step 2/3: Provisioning Azure resources[/]").RuleStyle("blue"));
+        AnsiConsole.MarkupLine("[grey]This creates the VM, networking, and starts cloud-init...[/]");
+        AnsiConsole.WriteLine();
+
+        var pulumiResult = RunPulumi("up --yes");
+        if (pulumiResult != 0)
+        {
+            AnsiConsole.MarkupLine("[red]Pulumi deployment failed.[/] Check the output above.");
+            return 1;
+        }
+
+        // Get outputs
+        var vmIp = GetPulumiOutput("vmPublicIp");
+
+        // Configure ptx CLI to connect to the new VM
+        AnsiConsole.WriteLine();
+        AnsiConsole.Write(new Rule("[blue]Step 3/3: Connecting CLI to new server[/]").RuleStyle("blue"));
+
+        if (!string.IsNullOrWhiteSpace(vmIp))
+        {
+            var config = AppConfig.Load();
+            config.Host = $"azureuser@{vmIp}";
+            config.ProjectDir = "/opt/pretalxtix";
+
+            // Try to find the private key matching the public key
+            var privateKeyPath = sshKeyPath.Replace(".pub", "");
+            if (File.Exists(privateKeyPath))
+                config.KeyFile = privateKeyPath;
+
+            config.Save();
+            AnsiConsole.MarkupLine($"[green]✓[/] CLI configured to connect to [yellow]azureuser@{vmIp}[/]");
+        }
+
+        // Print final summary
+        AnsiConsole.WriteLine();
+        AnsiConsole.Write(new Rule("[green]Provisioning complete![/]").RuleStyle("green"));
+        AnsiConsole.WriteLine();
+
+        AnsiConsole.MarkupLine("[grey]The VM is running cloud-init which will:[/]");
+        AnsiConsole.MarkupLine("  1. Install Docker");
+        AnsiConsole.MarkupLine("  2. Clone the repo and write .env");
+        AnsiConsole.MarkupLine("  3. Start all services (docker compose up)");
+        AnsiConsole.MarkupLine("  4. Run database migrations");
+        AnsiConsole.MarkupLine("  5. Set up daily backups");
+        AnsiConsole.MarkupLine("[grey]This takes ~5 minutes. You can monitor with:[/]");
+        AnsiConsole.MarkupLine($"  [yellow]ssh azureuser@{vmIp} tail -f /var/log/cloud-init-output.log[/]");
+        AnsiConsole.WriteLine();
+
+        if (!string.IsNullOrWhiteSpace(vmIp))
+        {
+            AnsiConsole.MarkupLine($"  [green]VM IP:[/]   {vmIp}");
+            AnsiConsole.MarkupLine($"  [green]SSH:[/]     ssh azureuser@{vmIp}");
+        }
+
+        AnsiConsole.MarkupLine($"  [green]Pretix:[/]  https://tickets.{domain}");
+        AnsiConsole.MarkupLine($"  [green]Pretalx:[/] https://talks.{domain}");
+        AnsiConsole.WriteLine();
+
+        if (!configureCloudflare)
+        {
+            AnsiConsole.MarkupLine("[yellow]Don't forget to set up DNS:[/]");
+            AnsiConsole.MarkupLine($"  tickets.{domain} → {vmIp}");
+            AnsiConsole.MarkupLine($"  talks.{domain}   → {vmIp}");
+            AnsiConsole.WriteLine();
+        }
+
+        AnsiConsole.MarkupLine("Once cloud-init finishes, manage your server with:");
+        AnsiConsole.MarkupLine("  [yellow]ptx status[/]     — check service health");
+        AnsiConsole.MarkupLine("  [yellow]ptx logs[/]       — view logs");
+        AnsiConsole.MarkupLine("  [yellow]ptx update[/]     — update container images");
+        AnsiConsole.MarkupLine("  [yellow]ptx backup[/]     — manual backup");
+
+        return 0;
+    }
+
+    private static bool CheckPrerequisite(string command, string args, string name)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo(command, args)
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            using var proc = Process.Start(psi);
+            proc?.WaitForExit(5000);
+            return true;
+        }
+        catch
+        {
+            AnsiConsole.MarkupLine($"[red]{name} not found.[/] Please install it first:");
+            AnsiConsole.MarkupLine($"  [blue]https://www.pulumi.com/docs/install/[/]");
+            return false;
+        }
+    }
+
+    private static string DetectSshKey()
+    {
+        var sshDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ssh");
+
+        foreach (var name in new[] { "id_ed25519.pub", "id_rsa.pub", "id_ecdsa.pub" })
+        {
+            var path = Path.Combine(sshDir, name);
+            if (File.Exists(path))
+                return path;
+        }
+
+        return Path.Combine(sshDir, "id_rsa.pub");
+    }
+
+    private static string? ReadSshPublicKey(string path)
+    {
+        var expanded = path.StartsWith('~')
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), path[2..])
+            : path;
+
+        if (!File.Exists(expanded))
+        {
+            AnsiConsole.MarkupLine($"[red]SSH public key not found:[/] {expanded}");
+            AnsiConsole.MarkupLine("Generate one with: [yellow]ssh-keygen -t ed25519[/]");
+            return null;
+        }
+
+        return File.ReadAllText(expanded).Trim();
+    }
+
+    private static int RunPulumi(string args, bool allowFailure = false)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "pulumi",
+            WorkingDirectory = InfraDir,
+            UseShellExecute = false,
+        };
+
+        foreach (var arg in args.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            psi.ArgumentList.Add(arg);
+
+        try
+        {
+            using var proc = Process.Start(psi);
+            if (proc == null)
+            {
+                if (!allowFailure)
+                    AnsiConsole.MarkupLine("[red]Failed to start pulumi.[/]");
+                return 1;
+            }
+
+            proc.WaitForExit();
+            return proc.ExitCode;
+        }
+        catch (Exception ex)
+        {
+            if (!allowFailure)
+                AnsiConsole.MarkupLine($"[red]Pulumi error:[/] {Markup.Escape(ex.Message)}");
+            return 1;
+        }
+    }
+
+    private static void SetConfig(string key, string value, bool secret = false)
+    {
+        var args = secret
+            ? $"config set {key} --secret"
+            : $"config set {key} {value}";
+
+        if (secret)
+        {
+            // For secrets, pipe the value via stdin to avoid shell exposure
+            var psi = new ProcessStartInfo
+            {
+                FileName = "pulumi",
+                WorkingDirectory = InfraDir,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            psi.ArgumentList.Add("config");
+            psi.ArgumentList.Add("set");
+            psi.ArgumentList.Add(key);
+            psi.ArgumentList.Add("--secret");
+
+            using var proc = Process.Start(psi);
+            if (proc != null)
+            {
+                proc.StandardInput.Write(value);
+                proc.StandardInput.Close();
+                proc.WaitForExit();
+            }
+        }
+        else
+        {
+            RunPulumi($"config set {key} {value}");
+        }
+    }
+
+    private static string GetPulumiOutput(string outputName)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "pulumi",
+            WorkingDirectory = InfraDir,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        psi.ArgumentList.Add("stack");
+        psi.ArgumentList.Add("output");
+        psi.ArgumentList.Add(outputName);
+
+        try
+        {
+            using var proc = Process.Start(psi);
+            if (proc == null) return "";
+            var output = proc.StandardOutput.ReadToEnd().Trim();
+            proc.WaitForExit();
+            return output;
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    private static string? FindRepoRoot()
+    {
+        // Walk up from the executing assembly location to find the repo root (contains infra/)
+        var dir = AppContext.BaseDirectory;
+        for (var i = 0; i < 10; i++)
+        {
+            if (Directory.Exists(Path.Combine(dir, "infra")))
+                return dir;
+            var parent = Directory.GetParent(dir);
+            if (parent == null) break;
+            dir = parent.FullName;
+        }
+
+        // Fallback: try current working directory
+        dir = Directory.GetCurrentDirectory();
+        for (var i = 0; i < 5; i++)
+        {
+            if (Directory.Exists(Path.Combine(dir, "infra")))
+                return dir;
+            var parent = Directory.GetParent(dir);
+            if (parent == null) break;
+            dir = parent.FullName;
+        }
+
+        return null;
+    }
+}

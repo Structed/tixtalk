@@ -1,6 +1,10 @@
 # Pretix + Pretalx on Azure
 
-Self-hosted [pretix](https://pretix.eu/) (ticketing) and [pretalx](https://pretalx.com/) (call for papers & scheduling) on an Azure VM via **Pulumi** Infrastructure as Code. A single `pulumi up` provisions the VM, installs Docker, and starts all services automatically.
+Self-hosted [pretix](https://pretix.eu/) (ticketing) and [pretalx](https://pretalx.com/) (call for papers & scheduling) on an Azure VM. One command provisions the infrastructure, installs Docker, deploys all services, runs migrations, and sets up daily backups.
+
+```bash
+ptx provision    # Interactive wizard → fully running deployment
+```
 
 ## What You Get
 
@@ -29,6 +33,9 @@ pulumi up
                     ├── Redis 7
                     ├── Pretix
                     └── Pretalx
+              Then automatically:
+                    ├── Runs database migrations
+                    └── Installs daily backup cron
 ```
 
 Estimated cost: **~$30/month** (Azure Standard_B2s: 2 vCPU, 4 GB RAM, 64 GB SSD).
@@ -44,7 +51,26 @@ Estimated cost: **~$30/month** (Azure Standard_B2s: 2 vCPU, 4 GB RAM, 64 GB SSD)
 
 ## Quick Start
 
-### 1. Configure
+### One-command setup (recommended)
+
+```bash
+# Install the CLI (requires .NET 8+ SDK)
+cd cli && dotnet run -- provision
+```
+
+The interactive wizard asks for your domain, SSH key, and Azure region, then:
+1. Configures Pulumi stack settings
+2. Provisions the Azure VM and networking (`pulumi up`)
+3. VM cloud-init installs Docker, clones repo, starts services, runs migrations, and sets up daily backups
+4. Configures the `ptx` CLI to connect to the new server
+
+After ~5 minutes your apps are live. Point DNS and visit them:
+- **Pretix**: `https://tickets.yourdomain.com`
+- **Pretalx**: `https://talks.yourdomain.com`
+
+### Manual Pulumi setup (advanced)
+
+If you prefer to run Pulumi directly:
 
 ```bash
 cd infra
@@ -67,17 +93,15 @@ pulumi config set pre-talx-tix:cloudflareApiToken YOUR_TOKEN --secret
 pulumi config set pre-talx-tix:cloudflareZoneId YOUR_ZONE_ID
 ```
 
-### 2. Deploy
+Then deploy, set up DNS, and access your apps:
 
 ```bash
 pulumi up
 ```
 
-This provisions the full Azure environment and bootstraps the VM. The cloud-init script runs on first boot (~3-5 minutes).
+Cloud-init runs on first boot (~5 min): installs Docker, starts services, runs migrations, sets up daily backups.
 
-### 3. Set up DNS
-
-Point two A records to the VM's public IP (shown in Pulumi outputs):
+Point DNS to the VM IP from `pulumi stack output vmPublicIp`:
 
 ```
 tickets.yourdomain.com → <vmPublicIp>
@@ -85,8 +109,6 @@ talks.yourdomain.com   → <vmPublicIp>
 ```
 
 If you configured Cloudflare, DNS records are created automatically.
-
-### 4. Access your apps
 
 - **Pretix**: `https://tickets.yourdomain.com`
 - **Pretalx**: `https://talks.yourdomain.com`
@@ -136,8 +158,11 @@ Once deployed, manage your server with the cross-platform .NET CLI or directly v
 Runs on **Windows, macOS, and Linux**. Manages your remote server over SSH.
 
 ```bash
-# First-time setup — configure your server connection
-ptx connect root@your-server-ip
+# Provision a new server (one-command setup)
+ptx provision
+
+# Or connect to an existing server
+ptx connect azureuser@your-server-ip
 
 # Then manage from anywhere
 ptx                      # Interactive menu (Spectre.Console UI)

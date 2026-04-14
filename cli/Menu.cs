@@ -8,9 +8,26 @@ public static class Menu
     {
         if (!config.IsConfigured)
         {
-            AnsiConsole.MarkupLine("[yellow]No server configured yet.[/]");
-            config.RunConnect(null);
+            AnsiConsole.Write(new Rule("[blue]Pretix + Pretalx Manager[/]").RuleStyle("blue"));
             AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine("[yellow]No server configured yet.[/]");
+            AnsiConsole.WriteLine();
+
+            var setupChoice = AnsiConsole.Prompt(
+                new SelectionPrompt<string>()
+                    .Title("[bold]What would you like to do?[/]")
+                    .HighlightStyle("green")
+                    .AddChoices(
+                        "Provision new server (Azure)",
+                        "Connect to existing server",
+                        "Quit"));
+
+            return setupChoice switch
+            {
+                "Provision new server (Azure)" => Provision.Run(),
+                "Connect to existing server" => ConnectAndContinue(config, remote),
+                _ => 0,
+            };
         }
 
         var domain = remote.GetRemoteDomain();
@@ -46,6 +63,7 @@ public static class Menu
                     "Stop services",
                     "Start services",
                     "─── First-time setup ───",
+                    "Provision new server (Azure)",
                     "Server setup (install Docker)",
                     "Deploy (first time)",
                     "─── Configuration ───",
@@ -66,6 +84,7 @@ public static class Menu
             "Update DNS records" => remote.RunCommand("dns"),
             "Stop services" => remote.RunCommand("stop"),
             "Start services" => remote.RunCommand("start"),
+            "Provision new server (Azure)" => Provision.Run(),
             "Server setup (install Docker)" => remote.RunCommand("setup"),
             "Deploy (first time)" => remote.RunCommand("deploy"),
             "Change connection" => ChangeConnection(config),
@@ -125,5 +144,12 @@ public static class Menu
     {
         config.RunConnect(null);
         return 0;
+    }
+
+    private static int ConnectAndContinue(AppConfig config, Remote remote)
+    {
+        config.RunConnect(null);
+        AnsiConsole.WriteLine();
+        return Show(config, remote);
     }
 }

@@ -101,6 +101,30 @@ public static class CloudInitBuilder
         // Start services via docker compose
         sb.AppendLine("  - cd /opt/pretalxtix && docker compose up -d");
 
+        // Wait for services to be healthy before running migrations
+        sb.AppendLine("  - |");
+        sb.AppendLine("    echo 'Waiting for services to be healthy...'");
+        sb.AppendLine("    cd /opt/pretalxtix");
+        sb.AppendLine("    for i in $(seq 1 60); do");
+        sb.AppendLine("      if docker compose exec -T postgres pg_isready -U pretalxtix >/dev/null 2>&1; then");
+        sb.AppendLine("        echo 'PostgreSQL is ready.'");
+        sb.AppendLine("        break");
+        sb.AppendLine("      fi");
+        sb.AppendLine("      echo \"Waiting for PostgreSQL... ($i/60)\"");
+        sb.AppendLine("      sleep 5");
+        sb.AppendLine("    done");
+
+        // Run pretix migrations and rebuild
+        sb.AppendLine("  - cd /opt/pretalxtix && docker compose exec -T pretix pretix migrate");
+        sb.AppendLine("  - cd /opt/pretalxtix && docker compose exec -T pretix pretix rebuild");
+
+        // Run pretalx migrations and rebuild
+        sb.AppendLine("  - cd /opt/pretalxtix && docker compose exec -T pretalx pretalx migrate");
+        sb.AppendLine("  - cd /opt/pretalxtix && docker compose exec -T pretalx pretalx rebuild");
+
+        // Install daily backup cron job
+        sb.AppendLine("  - cd /opt/pretalxtix && bash scripts/backup.sh --install-cron");
+
         return sb.ToString();
     }
 }

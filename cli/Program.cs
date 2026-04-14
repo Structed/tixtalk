@@ -14,6 +14,7 @@ var commandArgs = args.Skip(1).ToArray();
 
 return command switch
 {
+    "provision" => Provision.Run(),
     "connect" => Connect(commandArgs),
     "status" => remote.RunCommand("status"),
     "deploy" => remote.RunCommand("deploy"),
@@ -49,6 +50,7 @@ int ShowHelp()
         .AddColumn("[bold]Command[/]")
         .AddColumn("[bold]Description[/]");
 
+    table.AddRow("[green]provision[/]", "Provision a new Azure VM (interactive wizard)");
     table.AddRow("[green]connect[/] <user@host>", "Configure SSH connection to the server");
     table.AddRow("[green]status[/]", "Show service status, URLs, and disk usage");
     table.AddRow("[green]deploy[/]", "First-time deployment (generates secrets, starts services)");
