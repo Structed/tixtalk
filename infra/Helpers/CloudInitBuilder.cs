@@ -74,9 +74,8 @@ public static class CloudInitBuilder
         sb.AppendLine("  - apt-get install -y -qq unattended-upgrades");
         sb.AppendLine("  - dpkg-reconfigure -plow unattended-upgrades");
 
-        // Clone the repo
-        sb.AppendLine($"  - git clone {cfg.RepoUrl} /opt/pretalxtix");
-        sb.AppendLine("  - cd /opt/pretalxtix");
+        // Clone the repo (fail early if this doesn't work)
+        sb.AppendLine($"  - git clone {cfg.RepoUrl} /opt/pretalxtix || {{ echo 'FATAL: git clone failed'; exit 1; }}");
 
         // Write .env file
         sb.AppendLine("  - |");
@@ -101,18 +100,20 @@ public static class CloudInitBuilder
         // Start services via docker compose
         sb.AppendLine("  - cd /opt/pretalxtix && docker compose up -d");
 
-        // Wait for services to be healthy before running migrations
+        // Wait for PostgreSQL to be healthy before running migrations
         sb.AppendLine("  - |");
-        sb.AppendLine("    echo 'Waiting for services to be healthy...'");
         sb.AppendLine("    cd /opt/pretalxtix");
-        sb.AppendLine("    for i in $(seq 1 60); do");
-        sb.AppendLine("      if docker compose exec -T postgres pg_isready -U pretalxtix >/dev/null 2>&1; then");
+        sb.AppendLine("    echo 'Waiting for PostgreSQL...'");
+        sb.AppendLine("    for i in $(seq 1 90); do");
+        sb.AppendLine($"      if docker compose exec -T postgres pg_isready -U {dbUser} >/dev/null 2>&1; then");
         sb.AppendLine("        echo 'PostgreSQL is ready.'");
         sb.AppendLine("        break");
         sb.AppendLine("      fi");
-        sb.AppendLine("      echo \"Waiting for PostgreSQL... ($i/60)\"");
+        sb.AppendLine("      if [ $i -eq 90 ]; then echo 'ERROR: PostgreSQL failed to start within timeout'; exit 1; fi");
+        sb.AppendLine("      echo \"Waiting for PostgreSQL... ($i/90)\"");
         sb.AppendLine("      sleep 5");
         sb.AppendLine("    done");
+        sb.AppendLine("    sleep 10");
 
         // Run pretix migrations and rebuild
         sb.AppendLine("  - cd /opt/pretalxtix && docker compose exec -T pretix pretix migrate");

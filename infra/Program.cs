@@ -11,7 +11,7 @@ return await Deployment.RunAsync(() =>
     var vmSize = config.Get("vmSize") ?? "Standard_B2s";
     var pretixImageTag = config.Get("pretixImageTag") ?? "stable";
     var pretalxImageTag = config.Get("pretalxImageTag") ?? "latest";
-    var repoUrl = config.Get("repoUrl") ?? "https://github.com/JohanMolworworx/pre-talx-tix-azure.git";
+    var repoUrl = config.Get("repoUrl") ?? "https://github.com/Structed/pre-talx-tix-azure.git";
 
     // Optional config
     var cloudflareApiToken = config.Get("cloudflareApiToken") ?? "";
