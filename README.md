@@ -1,6 +1,6 @@
-# Pretix + Pretalx on a VPS
+# Pretix + Pretalx on Azure
 
-Self-hosted [pretix](https://pretix.eu/) (ticketing) and [pretalx](https://pretalx.com/) (call for papers & scheduling) via docker-compose. Optimized for a single cheap VPS (e.g., Hetzner CX33 at ~€5.49/mo).
+Self-hosted [pretix](https://pretix.eu/) (ticketing) and [pretalx](https://pretalx.com/) (call for papers & scheduling) on an Azure VM via **Pulumi** Infrastructure as Code. A single `pulumi up` provisions the VM, installs Docker, and starts all services automatically.
 
 ## What You Get
 
@@ -12,13 +12,128 @@ Self-hosted [pretix](https://pretix.eu/) (ticketing) and [pretalx](https://preta
 | **Pretix** | `pretix/standalone` | Ticketing at `tickets.yourdomain.com` |
 | **Pretalx** | `pretalx/standalone` | CfP/scheduling at `talks.yourdomain.com` |
 
-Estimated cost: **~€5-7/month** (Hetzner CX33: 4 vCPU, 8 GB RAM, 80 GB SSD).
+## Architecture
+
+```
+pulumi up
+  └─► Azure VM (Ubuntu 24.04 LTS, Standard_B2s)
+        ├── VNet + NSG (SSH, HTTP, HTTPS, HTTP/3)
+        ├── Static Public IP
+        └── cloud-init on first boot:
+              ├── Installs Docker
+              ├── Clones this repo
+              ├── Writes .env (secrets auto-generated)
+              └── docker compose up -d
+                    ├── Caddy (reverse proxy, auto TLS)
+                    ├── PostgreSQL 16
+                    ├── Redis 7
+                    ├── Pretix
+                    └── Pretalx
+```
+
+Estimated cost: **~$30/month** (Azure Standard_B2s: 2 vCPU, 4 GB RAM, 64 GB SSD).
+
+## Prerequisites
+
+- [.NET 8+ SDK](https://dotnet.microsoft.com/download)
+- [Pulumi CLI](https://www.pulumi.com/docs/install/)
+- An Azure subscription (`az login` or [Pulumi service account](https://www.pulumi.com/docs/clouds/azure/get-started/))
+- A domain with DNS access
+
+> **Already have a VPS?** Skip Pulumi and jump to [Alternative: Manual VPS Deployment](#alternative-manual-vps-deployment).
+
+## Quick Start
+
+### 1. Configure
+
+```bash
+cd infra
+
+# Initialize a Pulumi stack (first time only)
+pulumi stack init dev
+
+# Required config
+pulumi config set pre-talx-tix:domain yourdomain.com
+pulumi config set pre-talx-tix:sshPublicKey "$(cat ~/.ssh/id_rsa.pub)"
+
+# Optional — email (required for ticket confirmations & CfP notifications)
+pulumi config set pre-talx-tix:smtpHost smtp.example.com
+pulumi config set pre-talx-tix:smtpUser user@example.com
+pulumi config set pre-talx-tix:smtpPassword YOUR_PASSWORD --secret
+pulumi config set pre-talx-tix:mailFrom noreply@yourdomain.com
+
+# Optional — Cloudflare DNS automation
+pulumi config set pre-talx-tix:cloudflareApiToken YOUR_TOKEN --secret
+pulumi config set pre-talx-tix:cloudflareZoneId YOUR_ZONE_ID
+```
+
+### 2. Deploy
+
+```bash
+pulumi up
+```
+
+This provisions the full Azure environment and bootstraps the VM. The cloud-init script runs on first boot (~3-5 minutes).
+
+### 3. Set up DNS
+
+Point two A records to the VM's public IP (shown in Pulumi outputs):
+
+```
+tickets.yourdomain.com → <vmPublicIp>
+talks.yourdomain.com   → <vmPublicIp>
+```
+
+If you configured Cloudflare, DNS records are created automatically.
+
+### 4. Access your apps
+
+- **Pretix**: `https://tickets.yourdomain.com`
+- **Pretalx**: `https://talks.yourdomain.com`
+
+Both apps have web-based setup wizards on first visit.
+
+### Pulumi Outputs
+
+After deployment, `pulumi stack output` displays:
+
+| Output | Description |
+|--------|-------------|
+| `vmPublicIp` | VM public IP address |
+| `sshCommand` | Ready-to-use SSH command |
+| `pretixUrl` | `https://tickets.<domain>` |
+| `pretalxUrl` | `https://talks.<domain>` |
+
+## Configuration Reference
+
+All configuration is managed via Pulumi config (`pulumi config set <key> <value>`):
+
+| Pulumi Config Key | Required | Default | `.env` Equivalent | Description |
+|-------------------|----------|---------|-------------------|-------------|
+| `pre-talx-tix:domain` | Yes | — | `DOMAIN` | Your domain (e.g., `yourdomain.com`) |
+| `pre-talx-tix:sshPublicKey` | Yes | — | — | SSH public key for VM access |
+| `pre-talx-tix:prefix` | No | `pretalxtix` | — | Azure resource name prefix |
+| `pre-talx-tix:vmSize` | No | `Standard_B2s` | — | Azure VM SKU |
+| `azure-native:location` | No | `westeurope` | — | Azure region |
+| `pre-talx-tix:cloudflareApiToken` | No | — | `CLOUDFLARE_API_TOKEN` | Cloudflare API token (use `--secret`) |
+| `pre-talx-tix:cloudflareZoneId` | No | — | `CLOUDFLARE_ZONE_ID` | Cloudflare Zone ID |
+| `pre-talx-tix:cloudflareDnsChallenge` | No | `false` | `CLOUDFLARE_DNS_CHALLENGE` | Use DNS challenge for TLS |
+| `pre-talx-tix:mailFrom` | No | `noreply@example.com` | `MAIL_FROM` | Email sender address |
+| `pre-talx-tix:smtpHost` | No | — | `SMTP_HOST` | SMTP server hostname |
+| `pre-talx-tix:smtpPort` | No | `587` | `SMTP_PORT` | SMTP server port |
+| `pre-talx-tix:smtpUser` | No | — | `SMTP_USER` | SMTP username |
+| `pre-talx-tix:smtpPassword` | No | — | `SMTP_PASSWORD` | SMTP password (use `--secret`) |
+| `pre-talx-tix:pretixImageTag` | No | `stable` | `PRETIX_IMAGE_TAG` | Pretix Docker image tag |
+| `pre-talx-tix:pretalxImageTag` | No | `latest` | `PRETALX_IMAGE_TAG` | Pretalx Docker image tag |
+| `pre-talx-tix:repoUrl` | No | *(this repo)* | — | Git repo to clone on VM |
 
 ## Management CLI
 
+Once deployed, manage your server with the cross-platform .NET CLI or directly via SSH.
+
 ### Cross-platform .NET CLI (`ptx`)
 
-The primary management tool is a cross-platform .NET CLI that runs on **Windows, macOS, and Linux**. It manages your remote server over SSH.
+Runs on **Windows, macOS, and Linux**. Manages your remote server over SSH.
 
 ```bash
 # First-time setup — configure your server connection
@@ -60,72 +175,9 @@ When SSHed into the server directly, use `manage.sh`:
 ./manage.sh help         # All commands
 ```
 
-## Prerequisites
+## Day-2 Operations
 
-- A VPS running Ubuntu 22.04+ or Debian 12+ (2+ GB RAM minimum, 4+ GB recommended)
-- A domain with DNS access
-- SSH access to the server
-
-## Quick Start
-
-### 1. Set up DNS
-
-**Option A — Cloudflare (automated):** Add your Cloudflare API token and Zone ID to `.env` and `deploy.sh` will create the DNS records automatically.
-
-**Option B — Manual:** Point two A records to your server's IP address:
-
-```
-tickets.yourdomain.com → <server-ip>
-talks.yourdomain.com   → <server-ip>
-```
-
-### 2. Clone and configure
-
-SSH into your server, then:
-
-```bash
-git clone <this-repo>
-cd pre-talx-tix-azure
-
-# Install Docker if needed
-./manage.sh setup
-
-# Create your configuration
-cp .env.example .env
-nano .env  # Set DOMAIN, Cloudflare (optional), SMTP settings
-```
-
-### 3. Deploy
-
-```bash
-./manage.sh deploy
-```
-
-This will:
-- Generate secure random passwords for the database and app secret keys
-- Create Cloudflare DNS records (if API token is set)
-- Pull all container images
-- Start everything
-
-### 4. Initialize (first time only)
-
-Wait ~30 seconds for services to start, then:
-
-```bash
-docker compose exec pretix pretix migrate
-docker compose exec pretix pretix rebuild
-docker compose exec pretalx pretalx migrate
-docker compose exec pretalx pretalx rebuild
-```
-
-### 5. Access your apps
-
-- **Pretix**: `https://tickets.yourdomain.com`
-- **Pretalx**: `https://talks.yourdomain.com`
-
-Both apps have web-based setup wizards on first visit.
-
-## Updating Containers
+### Updating Containers
 
 ```bash
 # Pull latest images and restart
@@ -138,9 +190,9 @@ Both apps have web-based setup wizards on first visit.
 ./manage.sh update --pretix 2025.1.0 --pretalx 2025.1.0
 ```
 
-## Backups
+### Backups
 
-### Manual backup
+#### Manual backup
 
 ```bash
 ./manage.sh backup
@@ -148,7 +200,7 @@ Both apps have web-based setup wizards on first visit.
 
 Saves gzipped SQL dumps to `backups/` with timestamps.
 
-### Automatic daily backups
+#### Automatic daily backups
 
 ```bash
 ./manage.sh backup --install-cron
@@ -156,7 +208,7 @@ Saves gzipped SQL dumps to `backups/` with timestamps.
 
 Runs at 3:00 AM daily. Backups older than 30 days are auto-deleted.
 
-### Restore from backup
+#### Restore from backup
 
 ```bash
 # Interactive (lists available backups):
@@ -180,23 +232,23 @@ Both apps are multi-tenant — create new events in the web UI each year. No inf
 1. Go to [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens)
 2. Create a token with **Zone > DNS > Edit** permission for your domain
 3. Copy your **Zone ID** from the domain's Overview page in Cloudflare
-4. Add both to `.env`:
+4. Set via Pulumi config:
 
 ```bash
-CLOUDFLARE_API_TOKEN=your-token-here
-CLOUDFLARE_ZONE_ID=your-zone-id-here
+pulumi config set pre-talx-tix:cloudflareApiToken YOUR_TOKEN --secret
+pulumi config set pre-talx-tix:cloudflareZoneId YOUR_ZONE_ID
 ```
 
 ### TLS modes
 
-| Mode | `CLOUDFLARE_DNS_CHALLENGE` | Cloudflare proxy | How it works |
-|------|---------------------------|-----------------|--------------|
+| Mode | `cloudflareDnsChallenge` | Cloudflare proxy | How it works |
+|------|-------------------------|-----------------|--------------|
 | **HTTP challenge** (default) | `false` | Off (grey cloud) | Caddy validates via port 80. Simpler, standard image. |
 | **DNS challenge** | `true` | On (orange cloud) | Caddy validates via Cloudflare API. Hides server IP, full CDN. |
 
 To use DNS challenge:
 ```bash
-CLOUDFLARE_DNS_CHALLENGE=true
+pulumi config set pre-talx-tix:cloudflareDnsChallenge true
 ```
 
 This builds a custom Caddy image with the Cloudflare plugin (first deploy takes ~1 min longer).
@@ -204,28 +256,6 @@ This builds a custom Caddy image with the Cloudflare plugin (first deploy takes 
 ### Manual DNS management
 
 You can also run `scripts/cloudflare-dns.sh` independently to create/update DNS records without redeploying.
-
-## Configuration Reference
-
-All configuration is in `.env`:
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `DOMAIN` | Yes | — | Your domain (e.g., `yourdomain.com`) |
-| `CLOUDFLARE_API_TOKEN` | No | — | Cloudflare API token (automates DNS) |
-| `CLOUDFLARE_ZONE_ID` | No | — | Cloudflare Zone ID |
-| `CLOUDFLARE_DNS_CHALLENGE` | No | `false` | Use DNS challenge for TLS (enables proxy) |
-| `DB_USER` | No | `pretalxtix` | PostgreSQL username |
-| `DB_PASSWORD` | No | auto-generated | PostgreSQL password |
-| `PRETIX_SECRET_KEY` | No | auto-generated | Pretix secret key |
-| `PRETALX_SECRET_KEY` | No | auto-generated | Pretalx secret key |
-| `PRETIX_IMAGE_TAG` | No | `stable` | Pretix Docker image tag |
-| `PRETALX_IMAGE_TAG` | No | `latest` | Pretalx Docker image tag |
-| `MAIL_FROM` | Yes | — | Email sender address |
-| `SMTP_HOST` | Yes | — | SMTP server hostname |
-| `SMTP_PORT` | No | `587` | SMTP server port |
-| `SMTP_USER` | Yes | — | SMTP username |
-| `SMTP_PASSWORD` | Yes | — | SMTP password |
 
 ## Troubleshooting
 
@@ -252,71 +282,65 @@ docker compose exec postgres psql -U pretalxtix -l
 docker compose down && docker compose up -d
 ```
 
-## Destroying Everything
+## Alternative: Manual VPS Deployment
 
-```bash
-docker compose down -v  # -v removes all data volumes
-```
-
-## Pulumi Azure VM Deployment (Infrastructure as Code)
-
-The `infra/` directory contains a Pulumi C# project that provisions a complete Azure VM environment and automatically bootstraps the docker-compose stack via cloud-init.
-
-### What It Provisions
-
-| Resource | Details |
-|----------|---------|
-| **Resource Group** | Logical container for all Azure resources |
-| **Virtual Network** | 10.0.0.0/16 with a default subnet |
-| **Network Security Group** | Allows SSH (22), HTTP (80), HTTPS (443), HTTP/3 (443/UDP) |
-| **Public IP** | Static IP for DNS |
-| **Ubuntu 24.04 LTS VM** | Standard_B2s (2 vCPU, 4 GB RAM), 64 GB OS disk |
-| **Cloud-init** | Installs Docker, clones repo, writes `.env`, starts services |
+If you already have a VPS (or prefer not to use Pulumi), you can deploy directly on any Ubuntu 22.04+ or Debian 12+ server with 2+ GB RAM.
 
 ### Prerequisites
 
-- [.NET 8+ SDK](https://dotnet.microsoft.com/download)
-- [Pulumi CLI](https://www.pulumi.com/docs/install/)
-- An Azure subscription (logged in via `az login` or Pulumi service account)
+- A VPS with SSH access
+- A domain with DNS access
 
-### Deploy
+### Steps
+
+1. **Set up DNS** — Point `tickets.yourdomain.com` and `talks.yourdomain.com` to your server IP.
+
+2. **Clone and configure:**
+
+```bash
+git clone <this-repo>
+cd pre-talx-tix-azure
+
+# Install Docker if needed
+./manage.sh setup
+
+# Create your configuration
+cp .env.example .env
+nano .env  # Set DOMAIN, Cloudflare (optional), SMTP settings
+```
+
+3. **Deploy:**
+
+```bash
+./manage.sh deploy
+```
+
+This generates secrets, creates Cloudflare DNS records (if configured), pulls images, and starts everything.
+
+4. **Initialize (first time only):**
+
+```bash
+docker compose exec pretix pretix migrate
+docker compose exec pretix pretix rebuild
+docker compose exec pretalx pretalx migrate
+docker compose exec pretalx pretalx rebuild
+```
+
+5. **Access your apps** at `https://tickets.yourdomain.com` and `https://talks.yourdomain.com`.
+
+See [Configuration Reference](#configuration-reference) for all `.env` variables (the `.env Equivalent` column).
+
+## Destroying Everything
+
+### Pulumi (recommended)
 
 ```bash
 cd infra
-
-# Initialize stack (first time only)
-pulumi stack init dev
-
-# Set required config
-pulumi config set pre-talx-tix:domain yourdomain.com
-pulumi config set pre-talx-tix:sshPublicKey "$(cat ~/.ssh/id_rsa.pub)"
-
-# Optional config
-pulumi config set pre-talx-tix:vmSize Standard_B2s
-pulumi config set pre-talx-tix:cloudflareApiToken YOUR_TOKEN --secret
-pulumi config set pre-talx-tix:cloudflareZoneId YOUR_ZONE_ID
-pulumi config set pre-talx-tix:smtpHost smtp.example.com
-pulumi config set pre-talx-tix:smtpUser user@example.com
-pulumi config set pre-talx-tix:smtpPassword YOUR_PASSWORD --secret
-pulumi config set pre-talx-tix:mailFrom noreply@yourdomain.com
-
-# Deploy
-pulumi up
+pulumi destroy    # Removes all Azure resources
 ```
 
-### Outputs
-
-After deployment, Pulumi displays:
-
-| Output | Description |
-|--------|-------------|
-| `vmPublicIp` | VM public IP address |
-| `sshCommand` | Ready-to-use SSH command |
-| `pretixUrl` | `https://tickets.<domain>` |
-| `pretalxUrl` | `https://talks.<domain>` |
-
-### Tear Down
+### Manual VPS
 
 ```bash
-pulumi destroy
+docker compose down -v  # -v removes all data volumes
 ```
