@@ -17,16 +17,19 @@ public record CloudInitConfig
     public string CloudflareApiToken { get; init; } = "";
     public string CloudflareZoneId { get; init; } = "";
     public string CloudflareDnsChallenge { get; init; } = "false";
-    public string SmtpHost { get; init; } = "";
+    // SMTP config - can be Output<string> for ACS-generated values
+    public Output<string> SmtpHost { get; init; } = Output.Create("");
     public int SmtpPort { get; init; } = 587;
-    public string SmtpUser { get; init; } = "";
-    public string SmtpPassword { get; init; } = "";
-    public string MailFrom { get; init; } = "noreply@example.com";
+    public Output<string> SmtpUser { get; init; } = Output.Create("");
+    public Output<string> SmtpPassword { get; init; } = Output.Create("");
+    public Output<string> MailFrom { get; init; } = Output.Create("noreply@example.com");
     // Admin superuser config
     public string AdminEmail { get; init; } = "";
     public required Output<string> AdminPassword { get; init; }
     public string OrganiserName { get; init; } = "Conference Organiser";
     public string OrganiserSlug { get; init; } = "organiser";
+    // ACS DNS verification records (JSON) - for custom domains
+    public Output<string>? AcsVerificationRecords { get; init; }
 }
 
 /// <summary>
@@ -38,11 +41,21 @@ public static class CloudInitBuilder
 {
     public static Output<string> Build(CloudInitConfig cfg)
     {
-        return Output.Tuple(cfg.DbPassword, cfg.PretixSecretKey, cfg.PretalxSecretKey, cfg.DbUser, cfg.AdminPassword)
+        // Combine all Output values - use nested Tuple since Tuple only supports up to 8 args
+        var acsRecords = cfg.AcsVerificationRecords ?? Output.Create("");
+        
+        // Group 1: Database and secrets
+        var dbOutputs = Output.Tuple(cfg.DbPassword, cfg.PretixSecretKey, cfg.PretalxSecretKey, cfg.DbUser, cfg.AdminPassword);
+        // Group 2: SMTP config
+        var smtpOutputs = Output.Tuple(cfg.SmtpHost, cfg.SmtpUser, cfg.SmtpPassword, cfg.MailFrom, acsRecords);
+        
+        return Output.Tuple(dbOutputs, smtpOutputs)
             .Apply(t =>
             {
-                var (dbPassword, pretixSecret, pretalxSecret, dbUser, adminPassword) = t;
-                return Generate(cfg, dbUser, dbPassword, pretixSecret, pretalxSecret, adminPassword);
+                var ((dbPassword, pretixSecret, pretalxSecret, dbUser, adminPassword),
+                    (smtpHost, smtpUser, smtpPassword, mailFrom, verificationRecords)) = t;
+                return Generate(cfg, dbUser, dbPassword, pretixSecret, pretalxSecret, adminPassword,
+                    smtpHost, smtpUser, smtpPassword, mailFrom, verificationRecords);
             });
     }
 
@@ -52,14 +65,20 @@ public static class CloudInitBuilder
         string dbPassword,
         string pretixSecret,
         string pretalxSecret,
-        string adminPassword)
+        string adminPassword,
+        string smtpHost,
+        string smtpUser,
+        string smtpPassword,
+        string mailFrom,
+        string acsVerificationRecords)
     {
         // Build .env content and base64-encode it
-        var envContent = BuildEnvContent(cfg, dbUser, dbPassword, pretixSecret, pretalxSecret);
+        var envContent = BuildEnvContent(cfg, dbUser, dbPassword, pretixSecret, pretalxSecret,
+            smtpHost, smtpUser, smtpPassword, mailFrom);
         var envBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(envContent));
 
         // Build setup script and base64-encode it
-        var setupScript = BuildSetupScript(cfg, dbUser, adminPassword);
+        var setupScript = BuildSetupScript(cfg, dbUser, adminPassword, acsVerificationRecords);
         var scriptBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(setupScript));
 
         // Build minimal cloud-init YAML — no block scalars, no heredocs
@@ -73,6 +92,7 @@ public static class CloudInitBuilder
         sb.Append("  - curl\n");
         sb.Append("  - ufw\n");
         sb.Append("  - cron\n");
+        sb.Append("  - jq\n"); // For JSON parsing of ACS verification records
         sb.Append("\n");
         sb.Append("write_files:\n");
         sb.Append("  - path: /opt/pretalxtix-env\n");
@@ -94,7 +114,11 @@ public static class CloudInitBuilder
         string dbUser,
         string dbPassword,
         string pretixSecret,
-        string pretalxSecret)
+        string pretalxSecret,
+        string smtpHost,
+        string smtpUser,
+        string smtpPassword,
+        string mailFrom)
     {
         var sb = new StringBuilder();
         sb.Append($"DOMAIN={cfg.Domain}\n");
@@ -107,15 +131,15 @@ public static class CloudInitBuilder
         sb.Append($"CLOUDFLARE_API_TOKEN={cfg.CloudflareApiToken}\n");
         sb.Append($"CLOUDFLARE_ZONE_ID={cfg.CloudflareZoneId}\n");
         sb.Append($"CLOUDFLARE_DNS_CHALLENGE={cfg.CloudflareDnsChallenge}\n");
-        sb.Append($"MAIL_FROM={cfg.MailFrom}\n");
-        sb.Append($"SMTP_HOST={cfg.SmtpHost}\n");
+        sb.Append($"MAIL_FROM={mailFrom}\n");
+        sb.Append($"SMTP_HOST={smtpHost}\n");
         sb.Append($"SMTP_PORT={cfg.SmtpPort}\n");
-        sb.Append($"SMTP_USER={cfg.SmtpUser}\n");
-        sb.Append($"SMTP_PASSWORD={cfg.SmtpPassword}\n");
+        sb.Append($"SMTP_USER={smtpUser}\n");
+        sb.Append($"SMTP_PASSWORD={smtpPassword}\n");
         return sb.ToString();
     }
 
-    private static string BuildSetupScript(CloudInitConfig cfg, string dbUser, string adminPassword)
+    private static string BuildSetupScript(CloudInitConfig cfg, string dbUser, string adminPassword, string acsVerificationRecords)
     {
         var sb = new StringBuilder();
         sb.Append("#!/bin/bash\n");
@@ -187,6 +211,83 @@ public static class CloudInitBuilder
             sb.Append("cd /opt/pretalxtix\n");
             sb.Append("bash scripts/cloudflare-dns.sh || echo 'WARNING: Cloudflare DNS setup failed'\n");
             sb.Append("\n");
+            
+            // Set up ACS email DNS records for custom domain verification
+            if (!string.IsNullOrEmpty(acsVerificationRecords))
+            {
+                sb.Append("echo 'Setting up Azure Communication Services email DNS records...'\n");
+                sb.Append("source /opt/pretalxtix/.env\n");
+                // Store the verification records JSON
+                var escapedRecords = acsVerificationRecords.Replace("'", "'\\''");
+                sb.Append($"ACS_RECORDS='{escapedRecords}'\n");
+                sb.Append(@"
+# Create ACS email DNS records via Cloudflare API
+create_dns_record() {
+    local type=$1
+    local name=$2
+    local content=$3
+    local ttl=${4:-3600}
+    
+    # Check if record exists
+    local existing=$(curl -s -X GET ""https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records?type=$type&name=$name"" \
+        -H ""Authorization: Bearer $CLOUDFLARE_API_TOKEN"" \
+        -H ""Content-Type: application/json"" | jq -r '.result[0].id // empty')
+    
+    if [ -n ""$existing"" ]; then
+        echo ""  Updating existing $type record: $name""
+        curl -s -X PUT ""https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records/$existing"" \
+            -H ""Authorization: Bearer $CLOUDFLARE_API_TOKEN"" \
+            -H ""Content-Type: application/json"" \
+            --data '{""type"":""'""$type""'"",""name"":""'""$name""'"",""content"":""'""$content""'"",""ttl"":'""$ttl""',""proxied"":false}' > /dev/null
+    else
+        echo ""  Creating $type record: $name""
+        curl -s -X POST ""https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records"" \
+            -H ""Authorization: Bearer $CLOUDFLARE_API_TOKEN"" \
+            -H ""Content-Type: application/json"" \
+            --data '{""type"":""'""$type""'"",""name"":""'""$name""'"",""content"":""'""$content""'"",""ttl"":'""$ttl""',""proxied"":false}' > /dev/null
+    fi
+}
+
+# Parse and create records from ACS verification JSON
+if [ -n ""$ACS_RECORDS"" ] && [ ""$ACS_RECORDS"" != ""{}"" ]; then
+    # Domain ownership TXT record
+    DOMAIN_NAME=$(echo ""$ACS_RECORDS"" | jq -r '.domain.name // empty')
+    DOMAIN_VALUE=$(echo ""$ACS_RECORDS"" | jq -r '.domain.value // empty')
+    DOMAIN_TTL=$(echo ""$ACS_RECORDS"" | jq -r '.domain.ttl // 3600')
+    if [ -n ""$DOMAIN_NAME"" ] && [ -n ""$DOMAIN_VALUE"" ]; then
+        create_dns_record ""TXT"" ""$DOMAIN_NAME"" ""$DOMAIN_VALUE"" ""$DOMAIN_TTL""
+    fi
+    
+    # SPF TXT record
+    SPF_NAME=$(echo ""$ACS_RECORDS"" | jq -r '.spf.name // empty')
+    SPF_VALUE=$(echo ""$ACS_RECORDS"" | jq -r '.spf.value // empty')
+    SPF_TTL=$(echo ""$ACS_RECORDS"" | jq -r '.spf.ttl // 3600')
+    if [ -n ""$SPF_NAME"" ] && [ -n ""$SPF_VALUE"" ]; then
+        create_dns_record ""TXT"" ""$SPF_NAME"" ""$SPF_VALUE"" ""$SPF_TTL""
+    fi
+    
+    # DKIM CNAME records
+    DKIM_NAME=$(echo ""$ACS_RECORDS"" | jq -r '.dkim.name // empty')
+    DKIM_VALUE=$(echo ""$ACS_RECORDS"" | jq -r '.dkim.value // empty')
+    DKIM_TTL=$(echo ""$ACS_RECORDS"" | jq -r '.dkim.ttl // 3600')
+    if [ -n ""$DKIM_NAME"" ] && [ -n ""$DKIM_VALUE"" ]; then
+        create_dns_record ""CNAME"" ""$DKIM_NAME"" ""$DKIM_VALUE"" ""$DKIM_TTL""
+    fi
+    
+    DKIM2_NAME=$(echo ""$ACS_RECORDS"" | jq -r '.dkim2.name // empty')
+    DKIM2_VALUE=$(echo ""$ACS_RECORDS"" | jq -r '.dkim2.value // empty')
+    DKIM2_TTL=$(echo ""$ACS_RECORDS"" | jq -r '.dkim2.ttl // 3600')
+    if [ -n ""$DKIM2_NAME"" ] && [ -n ""$DKIM2_VALUE"" ]; then
+        create_dns_record ""CNAME"" ""$DKIM2_NAME"" ""$DKIM2_VALUE"" ""$DKIM2_TTL""
+    fi
+    
+    echo 'ACS email DNS records created.'
+else
+    echo 'No ACS verification records to create.'
+fi
+");
+                sb.Append("\n");
+            }
         }
 
         // Configure sysctl for Redis (avoid background save failures)

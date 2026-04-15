@@ -41,18 +41,22 @@ public static class Provision
         // Admin account (for pretix/pretalx control panels)
         var adminEmail = AnsiConsole.Ask<string>("Admin [green]email[/] (for pretix/pretalx login):");
 
-        // SMTP (enabled by default — required for transactional emails)
-        var configureSMTP = AnsiConsole.Confirm("Configure SMTP (email) now?", true);
+        // Email configuration - Azure Communication Services is the recommended default
+        var useAzureMail = AnsiConsole.Confirm(
+            "Use [green]Azure Communication Services[/] for email? (Recommended)", true);
+        
         string smtpHost = "", smtpUser = "", smtpPassword = "", mailFrom = "";
         int smtpPort = 587;
-        if (configureSMTP)
+        
+        if (!useAzureMail)
         {
+            // Manual SMTP configuration
             smtpHost = AnsiConsole.Ask("SMTP host:", "smtp.azurecomm.net");
             smtpPort = AnsiConsole.Ask("SMTP port:", 587);
             smtpUser = AnsiConsole.Ask<string>("SMTP user:");
             smtpPassword = AnsiConsole.Prompt(
                 new TextPrompt<string>("SMTP password:").Secret());
-            mailFrom = AnsiConsole.Ask("Mail from address:", adminEmail);
+            mailFrom = AnsiConsole.Ask("Mail from address:", $"noreply@{domain}");
         }
 
         // Optional: Cloudflare
@@ -80,7 +84,17 @@ public static class Provision
         summaryTable.AddRow("VM Size", vmSize);
         summaryTable.AddRow("SSH Key", sshKeyPath);
         summaryTable.AddRow("Admin Email", adminEmail);
-        summaryTable.AddRow("SMTP", configureSMTP ? smtpHost : "[grey]not configured[/]");
+        
+        if (useAzureMail)
+        {
+            var emailDomainType = configureCloudflare ? $"custom ({domain})" : "Azure-managed";
+            summaryTable.AddRow("Email", $"[green]Azure Communication Services[/] ({emailDomainType})");
+        }
+        else
+        {
+            summaryTable.AddRow("Email", $"SMTP: {smtpHost}");
+        }
+        
         summaryTable.AddRow("Cloudflare", configureCloudflare ? "enabled" : "[grey]not configured[/]");
         AnsiConsole.Write(summaryTable);
 
@@ -108,9 +122,13 @@ public static class Provision
         SetConfig("pre-talx-tix:sshPublicKey", sshPublicKey);
         SetConfig("pre-talx-tix:vmSize", vmSize);
         SetConfig("pre-talx-tix:adminEmail", adminEmail);
-
-        if (configureSMTP)
+        
+        // Email configuration
+        SetConfig("pre-talx-tix:useAzureMail", useAzureMail.ToString().ToLower());
+        
+        if (!useAzureMail)
         {
+            // Manual SMTP configuration
             SetConfig("pre-talx-tix:smtpHost", smtpHost);
             SetConfig("pre-talx-tix:smtpPort", smtpPort.ToString());
             SetConfig("pre-talx-tix:smtpUser", smtpUser);
@@ -172,6 +190,10 @@ public static class Provision
         AnsiConsole.MarkupLine("  3. Start all services (docker compose up)");
         AnsiConsole.MarkupLine("  4. Run database migrations");
         AnsiConsole.MarkupLine("  5. Set up daily backups");
+        if (useAzureMail && configureCloudflare)
+        {
+            AnsiConsole.MarkupLine("  6. Configure ACS email DNS records");
+        }
         AnsiConsole.MarkupLine("[grey]This takes ~5 minutes. You can monitor with:[/]");
         AnsiConsole.MarkupLine($"  [yellow]ssh azureuser@{vmIp} tail -f /var/log/cloud-init-output.log[/]");
         AnsiConsole.WriteLine();
@@ -185,6 +207,30 @@ public static class Provision
         AnsiConsole.MarkupLine($"  [green]Pretix:[/]  https://tickets.{domain}");
         AnsiConsole.MarkupLine($"  [green]Pretalx:[/] https://talks.{domain}");
         AnsiConsole.WriteLine();
+        
+        // Email configuration info
+        if (useAzureMail)
+        {
+            var emailMailFrom = GetPulumiOutput("mailFrom");
+            AnsiConsole.Write(new Rule("[blue]Email Configuration[/]").RuleStyle("blue"));
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine("  [green]Provider:[/] Azure Communication Services");
+            if (!string.IsNullOrWhiteSpace(emailMailFrom))
+            {
+                AnsiConsole.MarkupLine($"  [green]From:[/]     {emailMailFrom}");
+            }
+            if (configureCloudflare)
+            {
+                AnsiConsole.MarkupLine($"  [green]Domain:[/]   Custom ({domain})");
+                AnsiConsole.MarkupLine("[grey]  DNS records will be auto-created via Cloudflare.[/]");
+                AnsiConsole.MarkupLine("[grey]  Note: Domain verification may take a few minutes.[/]");
+            }
+            else
+            {
+                AnsiConsole.MarkupLine("  [green]Domain:[/]   Azure-managed");
+            }
+            AnsiConsole.WriteLine();
+        }
 
         // Display admin credentials
         var adminPassword = GetPulumiOutput("adminPassword", showSecrets: true);
