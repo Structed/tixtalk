@@ -41,8 +41,9 @@ public record AzureCommunicationArgs
 /// </summary>
 public static class AzureCommunicationStack
 {
-    // Email Communication Services Contributor role definition ID
-    private const string EmailContributorRoleId = "e9b2a056-6382-4fac-9b8f-8c42da5f192d";
+    // Contributor role - grants full access to manage resources
+    // Using this instead of "Communication and Email Service Owner" which may not exist in all subscriptions
+    private const string ContributorRoleId = "b24988ac-6180-42a0-ab88-20f7382dd24c";
 
     public static AzureCommunicationResult Create(AzureCommunicationArgs args)
     {
@@ -147,25 +148,27 @@ public static class AzureCommunicationStack
         });
 
         // 7. Create client secret (password) for SMTP authentication
+        // Use EndDate instead of deprecated EndDateRelative
+        var endDate = DateTime.UtcNow.AddYears(1).ToString("yyyy-MM-ddTHH:mm:ssZ");
         var appPassword = new ApplicationPassword($"{args.Prefix}-email-secret", new ApplicationPasswordArgs
         {
             ApplicationId = app.Id,
             DisplayName = "SMTP Auth Secret",
-            EndDateRelative = "8760h", // 1 year
+            EndDate = endDate,
         });
 
         // 8. Get current client config for subscription/tenant info
         var clientConfig = Pulumi.AzureNative.Authorization.GetClientConfig.Invoke();
 
-        // 9. Assign Email Contributor role to the service principal on the Email Service
+        // 9. Assign Contributor role to the service principal on the Communication Service
         var roleAssignment = new RoleAssignment($"{args.Prefix}-email-role", new RoleAssignmentArgs
         {
             RoleAssignmentName = Guid.NewGuid().ToString(),
-            Scope = emailService.Id,
+            Scope = communicationService.Id,
             PrincipalId = servicePrincipal.ObjectId,
             PrincipalType = PrincipalType.ServicePrincipal,
             RoleDefinitionId = clientConfig.Apply(c => 
-                $"/subscriptions/{c.SubscriptionId}/providers/Microsoft.Authorization/roleDefinitions/{EmailContributorRoleId}"),
+                $"/subscriptions/{c.SubscriptionId}/providers/Microsoft.Authorization/roleDefinitions/{ContributorRoleId}"),
         });
 
         // 10. Build SMTP credentials
