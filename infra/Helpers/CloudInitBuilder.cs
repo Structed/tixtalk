@@ -125,6 +125,10 @@ public static class CloudInitBuilder
         sb.Append("systemctl start docker\n");
         sb.Append("\n");
 
+        // Add azureuser to docker group (so they can run docker without sudo)
+        sb.Append("usermod -aG docker azureuser\n");
+        sb.Append("\n");
+
         // Verify Docker is ready
         sb.Append("echo 'Verifying Docker is ready...'\n");
         sb.Append("for i in $(seq 1 30); do\n");
