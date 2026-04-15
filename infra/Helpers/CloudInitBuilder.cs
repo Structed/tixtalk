@@ -174,10 +174,32 @@ public static class CloudInitBuilder
         sb.Append("mv /opt/pretalxtix-env /opt/pretalxtix/.env\n");
         sb.Append("\n");
 
-        // Start services
+        // Set up Cloudflare DNS records if configured
+        if (!string.IsNullOrEmpty(cfg.CloudflareApiToken))
+        {
+            sb.Append("echo 'Setting up Cloudflare DNS records...'\n");
+            sb.Append("cd /opt/pretalxtix\n");
+            sb.Append("bash scripts/cloudflare-dns.sh || echo 'WARNING: Cloudflare DNS setup failed'\n");
+            sb.Append("\n");
+        }
+
+        // Configure sysctl for Redis (avoid background save failures)
+        sb.Append("echo 'Configuring system for Redis...'\n");
+        sb.Append("sysctl vm.overcommit_memory=1\n");
+        sb.Append("echo 'vm.overcommit_memory = 1' >> /etc/sysctl.conf\n");
+        sb.Append("\n");
+
+        // Start services - use DNS challenge compose file if configured
         sb.Append("echo 'Starting services...'\n");
         sb.Append("cd /opt/pretalxtix\n");
-        sb.Append("docker compose up -d\n");
+        if (cfg.CloudflareDnsChallenge == "true")
+        {
+            sb.Append("docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d --build\n");
+        }
+        else
+        {
+            sb.Append("docker compose up -d\n");
+        }
         sb.Append("\n");
 
         // Wait for PostgreSQL
