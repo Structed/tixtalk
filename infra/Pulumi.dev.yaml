@@ -1,19 +1,42 @@
 config:
   azure-native:location: westeurope
-  pre-talx-tix:prefix: pretalxtix
+  pre-talx-tix:prefix: godotfest
   pre-talx-tix:vmSize: Standard_B2s
   pre-talx-tix:pretixImageTag: stable
   pre-talx-tix:pretalxImageTag: latest
-  pre-talx-tix:mailFrom: noreply@example.com
+  pre-talx-tix:mailFrom: DoNotReply@godotfest.com
   # Required — set before running `pulumi up`:
-  # pre-talx-tix:domain: yourdomain.com
-  # pre-talx-tix:sshPublicKey: ssh-rsa AAAA...
-  # Optional — Cloudflare DNS automation:
-  # pre-talx-tix:cloudflareApiToken: <secret>
-  # pre-talx-tix:cloudflareZoneId: <zone-id>
-  # pre-talx-tix:cloudflareDnsChallenge: "false"
-  # Optional — SMTP:
-  # pre-talx-tix:smtpHost: smtp.example.com
-  # pre-talx-tix:smtpPort: "587"
-  # pre-talx-tix:smtpUser: user
-  # pre-talx-tix:smtpPassword: <secret>
+
+  pre-talx-tix:domain: godotfest.com
+  pre-talx-tix:sshPublicKey: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCXKsPDUWpQHp8W/Up6FdAnlnCk5atme5Nzdg5Tms3vpDjV01xzD4udpibWVm3JGfNqw8B4xzDIC+hSZAcgPVlehyoX/kyNz4TSQtHLEaVsuHeRxzcnB5NEW1fVqmYxI+XayduLG64HkvdlVz/8GmEtuoWB7pmc8QdKaSGBchkw7wA2h1eIgL1l7huy5xisOvTALIZqKUmqu3uYVSRcbfqT6PASwzlYVbhOoJFW3jj50lkYOv3euhAJOjpx9PzntJJBnvHKTz1ldYiALnEJGvNChAcqclNcBh+mI7Sj9kfyW9Ofh4sQN7aydMwz32uRfYxqUJ6lXz7tZxp61ilwsG5C9aFPsXkeq7bw9/cRMg3Sv2qAvGkNXCXS4BF8vkMRF0CTVcuY0bHX3B8PsDfmgKe155ATTNT3qXITY+wnVfl0tz45ofH7JAJlA+UHEkhh8H31zSYyWEKbsnI4tBKfKpIr4nsR6sG5dObC4UEGb/gstfbj6kCCRmRDVax259GltRBtGUbuSNhbxqeGpWcTHLgHrvOfBRo09yFPEc/utCvCl+XpfPehUwyzEbigy8CgNqOzRCgjOaoDQpoQyF/+3cRhnWiW1fik64sS+l3f0jEFRTaLZ+a0oYr3SiebEJpgsyPYwdy5bQ4AmpUjgw5z4EbcWGIUXIQzySft7/E/8hFnyw==
+  pre-talx-tix:smtpHost: smtp.azurecomm.net
+  pre-talx-tix:smtpPort: "587"
+  pre-talx-tix:smtpUser: godotfest-web-communication-services-eu.293a0707-6a9d-4f84-9199-c38446763d56.b9b56bc4-19cb-4686-b32d-ec36a6b2baad
+  pre-talx-tix:smtpPassword:
+    secure: AAABAOZkxeOJVSFA448OXkqbjW6P84XsrFoZUzM3n0vi8zkcfzc/FfothksEF+5P4mHR1ktLLrPNe3jmdpWrUds5xzq6sZNQ
+  pre-talx-tix:cloudflareApiToken:
+    secure: AAABAH1UcW/pqRCBFGf7LumSpU2X8qtqlcgIaubNCdirTmBLhSChh4kPBke+Oau6AF0fUBAgg5lJQNFMNMxmWUkZTQmo5YcdLBzr91ApUQiani2A6w==
+  pre-talx-tix:cloudflareZoneId: 3191caf42094e04b63439d70094f4b26
+  pre-talx-tix:cloudflareDnsChallenge: "true"
+
+# pre-talx-tix:domain: yourdomain.com
+
+# pre-talx-tix:sshPublicKey: ssh-rsa AAAA...
+
+# Optional — Cloudflare DNS automation:
+
+# pre-talx-tix:cloudflareApiToken: <secret>
+
+# pre-talx-tix:cloudflareZoneId: <zone-id>
+
+# pre-talx-tix:cloudflareDnsChallenge: "false"
+
+# Optional — SMTP:
+
+# pre-talx-tix:smtpHost: smtp.example.com
+
+# pre-talx-tix:smtpPort: "587"
+
+# pre-talx-tix:smtpUser: user
+
+# pre-talx-tix:smtpPassword: <secret>

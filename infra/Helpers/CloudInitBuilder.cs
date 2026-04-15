@@ -22,6 +22,11 @@ public record CloudInitConfig
     public string SmtpUser { get; init; } = "";
     public string SmtpPassword { get; init; } = "";
     public string MailFrom { get; init; } = "noreply@example.com";
+    // Admin superuser config
+    public string AdminEmail { get; init; } = "";
+    public required Output<string> AdminPassword { get; init; }
+    public string OrganiserName { get; init; } = "Conference Organiser";
+    public string OrganiserSlug { get; init; } = "organiser";
 }
 
 /// <summary>
@@ -33,11 +38,11 @@ public static class CloudInitBuilder
 {
     public static Output<string> Build(CloudInitConfig cfg)
     {
-        return Output.Tuple(cfg.DbPassword, cfg.PretixSecretKey, cfg.PretalxSecretKey, cfg.DbUser)
+        return Output.Tuple(cfg.DbPassword, cfg.PretixSecretKey, cfg.PretalxSecretKey, cfg.DbUser, cfg.AdminPassword)
             .Apply(t =>
             {
-                var (dbPassword, pretixSecret, pretalxSecret, dbUser) = t;
-                return Generate(cfg, dbUser, dbPassword, pretixSecret, pretalxSecret);
+                var (dbPassword, pretixSecret, pretalxSecret, dbUser, adminPassword) = t;
+                return Generate(cfg, dbUser, dbPassword, pretixSecret, pretalxSecret, adminPassword);
             });
     }
 
@@ -46,14 +51,15 @@ public static class CloudInitBuilder
         string dbUser,
         string dbPassword,
         string pretixSecret,
-        string pretalxSecret)
+        string pretalxSecret,
+        string adminPassword)
     {
         // Build .env content and base64-encode it
         var envContent = BuildEnvContent(cfg, dbUser, dbPassword, pretixSecret, pretalxSecret);
         var envBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(envContent));
 
         // Build setup script and base64-encode it
-        var setupScript = BuildSetupScript(cfg, dbUser);
+        var setupScript = BuildSetupScript(cfg, dbUser, adminPassword);
         var scriptBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(setupScript));
 
         // Build minimal cloud-init YAML — no block scalars, no heredocs
@@ -109,7 +115,7 @@ public static class CloudInitBuilder
         return sb.ToString();
     }
 
-    private static string BuildSetupScript(CloudInitConfig cfg, string dbUser)
+    private static string BuildSetupScript(CloudInitConfig cfg, string dbUser, string adminPassword)
     {
         var sb = new StringBuilder();
         sb.Append("#!/bin/bash\n");
@@ -266,6 +272,38 @@ public static class CloudInitBuilder
 
         // Note: pretix/pretalx standalone containers handle migrations and static files automatically on startup.
         // Do NOT run 'pretix rebuild' or 'pretalx rebuild' here - it causes migration race conditions.
+
+        // Create superuser accounts if admin email is configured
+        if (!string.IsNullOrEmpty(cfg.AdminEmail))
+        {
+            sb.Append("echo 'Creating admin superuser accounts...'\n");
+            sb.Append("\n");
+            
+            // Create Pretix superuser
+            sb.Append("echo 'Creating Pretix admin user...'\n");
+            sb.Append($"docker compose exec -T -e DJANGO_SUPERUSER_EMAIL='{cfg.AdminEmail}' -e DJANGO_SUPERUSER_PASSWORD='{adminPassword}' pretix pretix createsuperuser --noinput || echo 'WARNING: Pretix superuser creation failed (may already exist)'\n");
+            sb.Append("\n");
+            
+            // Create Pretalx superuser via init command
+            sb.Append("echo 'Creating Pretalx admin user and organiser...'\n");
+            sb.Append($"docker compose exec -T -e DJANGO_SUPERUSER_EMAIL='{cfg.AdminEmail}' -e DJANGO_SUPERUSER_PASSWORD='{adminPassword}' -e PRETALX_INIT_ORGANISER_NAME='{cfg.OrganiserName}' -e PRETALX_INIT_ORGANISER_SLUG='{cfg.OrganiserSlug}' pretalx pretalx init --noinput || echo 'WARNING: Pretalx init failed (may already be initialized)'\n");
+            sb.Append("\n");
+            
+            // Write credentials to secure file
+            sb.Append("echo 'Saving admin credentials...'\n");
+            sb.Append("cat > /root/admin-credentials.txt << 'CREDENTIALS'\n");
+            sb.Append("PreTalxTix Admin Credentials\n");
+            sb.Append("============================\n");
+            sb.Append($"Email:    {cfg.AdminEmail}\n");
+            sb.Append($"Password: {adminPassword}\n");
+            sb.Append("\n");
+            sb.Append($"Pretix:   https://tickets.{cfg.Domain}/control/\n");
+            sb.Append($"Pretalx:  https://talks.{cfg.Domain}/orga/\n");
+            sb.Append("CREDENTIALS\n");
+            sb.Append("chmod 600 /root/admin-credentials.txt\n");
+            sb.Append("echo 'Admin credentials saved to /root/admin-credentials.txt'\n");
+            sb.Append("\n");
+        }
 
         // Ensure cron service is running before installing cron job
         sb.Append("echo 'Starting cron service...'\n");

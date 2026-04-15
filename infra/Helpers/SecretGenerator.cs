@@ -5,7 +5,8 @@ namespace PreTalxTix.Infra.Helpers;
 public record GeneratedSecrets(
     RandomPassword DbPassword,
     RandomPassword PretixSecretKey,
-    RandomPassword PretalxSecretKey
+    RandomPassword PretalxSecretKey,
+    RandomPassword AdminPassword
 );
 
 /// <summary>
@@ -33,6 +34,12 @@ public static class SecretGenerator
             Special = false,
         });
 
-        return new GeneratedSecrets(dbPassword, pretixSecretKey, pretalxSecretKey);
+        var adminPassword = new RandomPassword($"{prefix}-admin-pwd", new RandomPasswordArgs
+        {
+            Length = 24,
+            Special = false,
+        });
+
+        return new GeneratedSecrets(dbPassword, pretixSecretKey, pretalxSecretKey, adminPassword);
     }
 }

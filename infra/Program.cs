@@ -24,6 +24,11 @@ return await Deployment.RunAsync(() =>
     var smtpPassword = config.Get("smtpPassword") ?? "";
     var mailFrom = config.Get("mailFrom") ?? "noreply@example.com";
 
+    // Admin superuser config
+    var adminEmail = config.Get("adminEmail") ?? "";
+    var organiserName = config.Get("organiserName") ?? "Conference Organiser";
+    var organiserSlug = config.Get("organiserSlug") ?? "organiser";
+
     // 1. Resource Group
     var rg = ResourceGroupStack.Create(prefix);
 
@@ -53,6 +58,10 @@ return await Deployment.RunAsync(() =>
         SmtpUser = smtpUser,
         SmtpPassword = smtpPassword,
         MailFrom = mailFrom,
+        AdminEmail = adminEmail,
+        AdminPassword = secrets.AdminPassword.Result,
+        OrganiserName = organiserName,
+        OrganiserSlug = organiserSlug,
     });
 
     // 5. Ubuntu 24.04 LTS Virtual Machine
@@ -67,7 +76,7 @@ return await Deployment.RunAsync(() =>
     });
 
     // Outputs
-    return new Dictionary<string, object?>
+    var outputs = new Dictionary<string, object?>
     {
         ["resourceGroupName"] = rg.Name,
         ["vmPublicIp"] = vm.PublicIpAddress,
@@ -75,4 +84,15 @@ return await Deployment.RunAsync(() =>
         ["pretixUrl"] = $"https://tickets.{domain}",
         ["pretalxUrl"] = $"https://talks.{domain}",
     };
+
+    // Add admin credentials to outputs if admin email is configured
+    if (!string.IsNullOrEmpty(adminEmail))
+    {
+        outputs["adminEmail"] = adminEmail;
+        outputs["adminPassword"] = Output.CreateSecret(secrets.AdminPassword.Result);
+        outputs["pretixAdminUrl"] = $"https://tickets.{domain}/control/";
+        outputs["pretalxAdminUrl"] = $"https://talks.{domain}/orga/";
+    }
+
+    return outputs;
 });
