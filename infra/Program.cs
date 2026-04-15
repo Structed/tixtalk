@@ -21,6 +21,7 @@ return await Deployment.RunAsync(() =>
     
     // Email configuration - ACS is the default
     var useAzureMail = config.GetBoolean("useAzureMail") ?? true;
+    var acsUseCustomDomain = config.GetBoolean("acsUseCustomDomain") ?? false;
     var smtpHost = config.Get("smtpHost") ?? "";
     var smtpPort = config.GetInt32("smtpPort") ?? 587;
     var smtpUser = config.Get("smtpUser") ?? "";
@@ -52,13 +53,13 @@ return await Deployment.RunAsync(() =>
     if (useAzureMail)
     {
         // Use Azure Communication Services for email
-        var useCustomDomain = !string.IsNullOrEmpty(cloudflareApiToken);
+        // Custom domain requires Cloudflare for DNS automation
         acsResult = AzureCommunicationStack.Create(new AzureCommunicationArgs
         {
             Prefix = prefix,
             Domain = domain,
             ResourceGroup = rg,
-            UseCustomDomain = useCustomDomain,
+            UseCustomDomain = acsUseCustomDomain,
         });
         
         finalSmtpHost = acsResult.SmtpHost;

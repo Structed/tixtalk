@@ -47,8 +47,38 @@ public static class Provision
         
         string smtpHost = "", smtpUser = "", smtpPassword = "", mailFrom = "";
         int smtpPort = 587;
+        bool acsUseCustomDomain = false;
         
-        if (!useAzureMail)
+        // Track Cloudflare config - may be set by ACS custom domain requirement
+        string cfToken = "", cfZoneId = "";
+        bool cfDnsChallenge = false;
+        bool configureCloudflare = false;
+        
+        if (useAzureMail)
+        {
+            // ACS domain type selection
+            var domainChoice = AnsiConsole.Prompt(
+                new SelectionPrompt<string>()
+                    .Title("ACS email domain type:")
+                    .AddChoices(new[] {
+                        $"Custom domain (noreply@{domain})",
+                        "Azure-managed (noreply@xxx.azurecomm.net)"
+                    }));
+            
+            acsUseCustomDomain = domainChoice.StartsWith("Custom");
+            
+            if (acsUseCustomDomain)
+            {
+                // Custom domain requires Cloudflare for DNS automation
+                AnsiConsole.MarkupLine("[yellow]Custom domain requires Cloudflare for DNS automation.[/]");
+                cfToken = AnsiConsole.Prompt(
+                    new TextPrompt<string>("Cloudflare API token:").Secret());
+                cfZoneId = AnsiConsole.Ask<string>("Cloudflare Zone ID:");
+                cfDnsChallenge = AnsiConsole.Confirm("Use DNS challenge for TLS (orange-cloud proxy)?", false);
+                configureCloudflare = true;
+            }
+        }
+        else
         {
             // Manual SMTP configuration
             smtpHost = AnsiConsole.Ask("SMTP host:", "smtp.azurecomm.net");
@@ -59,16 +89,17 @@ public static class Provision
             mailFrom = AnsiConsole.Ask("Mail from address:", $"noreply@{domain}");
         }
 
-        // Optional: Cloudflare
-        var configureCloudflare = AnsiConsole.Confirm("Configure Cloudflare DNS automation?", false);
-        string cfToken = "", cfZoneId = "";
-        bool cfDnsChallenge = false;
-        if (configureCloudflare)
+        // Optional: Cloudflare (if not already configured via ACS custom domain)
+        if (!configureCloudflare)
         {
-            cfToken = AnsiConsole.Prompt(
-                new TextPrompt<string>("Cloudflare API token:").Secret());
-            cfZoneId = AnsiConsole.Ask<string>("Cloudflare Zone ID:");
-            cfDnsChallenge = AnsiConsole.Confirm("Use DNS challenge for TLS (orange-cloud proxy)?", false);
+            configureCloudflare = AnsiConsole.Confirm("Configure Cloudflare DNS automation?", false);
+            if (configureCloudflare)
+            {
+                cfToken = AnsiConsole.Prompt(
+                    new TextPrompt<string>("Cloudflare API token:").Secret());
+                cfZoneId = AnsiConsole.Ask<string>("Cloudflare Zone ID:");
+                cfDnsChallenge = AnsiConsole.Confirm("Use DNS challenge for TLS (orange-cloud proxy)?", false);
+            }
         }
 
         // Summary
@@ -87,7 +118,7 @@ public static class Provision
         
         if (useAzureMail)
         {
-            var emailDomainType = configureCloudflare ? $"custom ({domain})" : "Azure-managed";
+            var emailDomainType = acsUseCustomDomain ? $"custom ({domain})" : "Azure-managed";
             summaryTable.AddRow("Email", $"[green]Azure Communication Services[/] ({emailDomainType})");
         }
         else
@@ -125,6 +156,10 @@ public static class Provision
         
         // Email configuration
         SetConfig("pre-talx-tix:useAzureMail", useAzureMail.ToString().ToLower());
+        if (useAzureMail)
+        {
+            SetConfig("pre-talx-tix:acsUseCustomDomain", acsUseCustomDomain.ToString().ToLower());
+        }
         
         if (!useAzureMail)
         {

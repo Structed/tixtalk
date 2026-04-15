@@ -141,6 +141,7 @@ All configuration is managed via Pulumi config (`pulumi config set <key> <value>
 | `pre-talx-tix:cloudflareZoneId` | No | — | `CLOUDFLARE_ZONE_ID` | Cloudflare Zone ID |
 | `pre-talx-tix:cloudflareDnsChallenge` | No | `false` | `CLOUDFLARE_DNS_CHALLENGE` | Use DNS challenge for TLS |
 | `pre-talx-tix:useAzureMail` | No | `true` | — | Use Azure Communication Services for email |
+| `pre-talx-tix:acsUseCustomDomain` | No | `false` | — | Use custom domain for ACS (requires Cloudflare) |
 | `pre-talx-tix:mailFrom` | No | `noreply@example.com` | `MAIL_FROM` | Email sender address |
 | `pre-talx-tix:smtpHost` | No | — | `SMTP_HOST` | SMTP server hostname |
 | `pre-talx-tix:smtpPort` | No | `587` | `SMTP_PORT` | SMTP server port |
@@ -262,7 +263,7 @@ When using `ptx provision`, you can enable **Azure Communication Services** for 
 | ✓ Configured | Custom domain | `noreply@yourdomain.com` |
 | ✗ Not configured | Azure-managed | `noreply@xxx.azurecomm.net` |
 
-With Cloudflare enabled, cloud-init automatically creates the required DNS records (domain verification, SPF, DKIM).
+When using `ptx provision`, you'll be prompted to choose between custom domain (requires Cloudflare) or Azure-managed domain.
 
 ### Configuration
 
@@ -270,7 +271,13 @@ With Cloudflare enabled, cloud-init automatically creates the required DNS recor
 # Enable ACS email (default: true)
 pulumi config set pre-talx-tix:useAzureMail true
 
-# Or disable to use manual SMTP
+# Use custom domain (requires Cloudflare)
+pulumi config set pre-talx-tix:acsUseCustomDomain true
+
+# Or use Azure-managed domain (default, no Cloudflare needed)
+pulumi config set pre-talx-tix:acsUseCustomDomain false
+
+# Disable ACS entirely (use manual SMTP)
 pulumi config set pre-talx-tix:useAzureMail false
 ```
 
