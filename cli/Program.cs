@@ -1,5 +1,5 @@
 using Spectre.Console;
-using PreTalxTix.Cli;
+using TixTalk.Cli;
 
 var config = AppConfig.Load();
 var remote = new Remote(config);
@@ -44,11 +44,11 @@ int SshCommand(string[] sshArgs)
     if (sshArgs.Length == 0)
     {
         AnsiConsole.MarkupLine("[red]Error:[/] Missing subcommand. Usage:");
-        AnsiConsole.MarkupLine("  [yellow]ptx ssh open[/]        - Open SSH from your current IP");
-        AnsiConsole.MarkupLine("  [yellow]ptx ssh open <cidr>[/] - Open SSH from specified CIDR");
-        AnsiConsole.MarkupLine("  [yellow]ptx ssh close[/]       - Close SSH access");
-        AnsiConsole.MarkupLine("  [yellow]ptx ssh status[/]      - Show current SSH access status");
-        AnsiConsole.MarkupLine("  [yellow]ptx ssh config[/]      - Configure Azure resource info");
+        AnsiConsole.MarkupLine("  [yellow]tixtalk ssh open[/]        - Open SSH from your current IP");
+        AnsiConsole.MarkupLine("  [yellow]tixtalk ssh open <cidr>[/] - Open SSH from specified CIDR");
+        AnsiConsole.MarkupLine("  [yellow]tixtalk ssh close[/]       - Close SSH access");
+        AnsiConsole.MarkupLine("  [yellow]tixtalk ssh status[/]      - Show current SSH access status");
+        AnsiConsole.MarkupLine("  [yellow]tixtalk ssh config[/]      - Configure Azure resource info");
         return 1;
     }
     
@@ -80,7 +80,7 @@ int ShowHelp()
 {
     AnsiConsole.Write(new Rule("[blue]Pretix + Pretalx CLI[/]").RuleStyle("blue"));
     AnsiConsole.WriteLine();
-    AnsiConsole.MarkupLine("[bold]Usage:[/] ptx [green]<command>[/] [grey][[options]][/]");
+    AnsiConsole.MarkupLine("[bold]Usage:[/] tixtalk [green]<command>[/] [grey][[options]][/]");
     AnsiConsole.WriteLine();
 
     var table = new Table()
@@ -108,8 +108,8 @@ int ShowHelp()
     AnsiConsole.Write(table);
 
     AnsiConsole.WriteLine();
-    AnsiConsole.MarkupLine("Run [yellow]ptx[/] without arguments for an interactive menu.");
-    AnsiConsole.MarkupLine($"Config: [grey]{Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".pretalxtix", "config.json")}[/]");
+    AnsiConsole.MarkupLine("Run [yellow]tixtalk[/] without arguments for an interactive menu.");
+    AnsiConsole.MarkupLine($"Config: [grey]{Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".tixtalk", "config.json")}[/]");
 
     return 0;
 }
@@ -117,6 +117,6 @@ int ShowHelp()
 int Unknown(string cmd)
 {
     AnsiConsole.MarkupLine($"[red]Unknown command:[/] {Markup.Escape(cmd)}");
-    AnsiConsole.MarkupLine("Run [yellow]ptx help[/] for usage.");
+    AnsiConsole.MarkupLine("Run [yellow]tixtalk help[/] for usage.");
     return 1;
 }

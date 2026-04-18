@@ -1,6 +1,6 @@
 using Pulumi.AzureNative.Resources;
 
-namespace PreTalxTix.Infra.Infrastructure;
+namespace TixTalk.Infra.Infrastructure;
 
 public static class ResourceGroupStack
 {

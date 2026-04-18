@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Spectre.Console;
 
-namespace PreTalxTix.Cli;
+namespace TixTalk.Cli;
 
 public static partial class Provision
 {
@@ -209,35 +209,35 @@ public static partial class Provision
 
         // Set config values
         SetConfig("azure-native:location", region);
-        SetConfig("pre-talx-tix:prefix", prefix);
-        SetConfig("pre-talx-tix:domain", domain);
-        SetConfig("pre-talx-tix:sshPublicKey", sshPublicKey);
-        SetConfig("pre-talx-tix:vmSize", vmSize);
-        SetConfig("pre-talx-tix:adminEmail", adminEmail);
+        SetConfig("tixtalk:prefix", prefix);
+        SetConfig("tixtalk:domain", domain);
+        SetConfig("tixtalk:sshPublicKey", sshPublicKey);
+        SetConfig("tixtalk:vmSize", vmSize);
+        SetConfig("tixtalk:adminEmail", adminEmail);
         
         // Email configuration
-        SetConfig("pre-talx-tix:useAzureMail", useAzureMail.ToString().ToLower());
+        SetConfig("tixtalk:useAzureMail", useAzureMail.ToString().ToLower());
         if (useAzureMail)
         {
-            SetConfig("pre-talx-tix:acsUseCustomDomain", acsUseCustomDomain.ToString().ToLower());
+            SetConfig("tixtalk:acsUseCustomDomain", acsUseCustomDomain.ToString().ToLower());
         }
         
         if (!useAzureMail)
         {
             // Manual SMTP configuration
-            SetConfig("pre-talx-tix:smtpHost", smtpHost);
-            SetConfig("pre-talx-tix:smtpPort", smtpPort.ToString());
-            SetConfig("pre-talx-tix:smtpUser", smtpUser);
-            SetConfig("pre-talx-tix:smtpPassword", smtpPassword, secret: true);
-            SetConfig("pre-talx-tix:mailFrom", mailFrom);
+            SetConfig("tixtalk:smtpHost", smtpHost);
+            SetConfig("tixtalk:smtpPort", smtpPort.ToString());
+            SetConfig("tixtalk:smtpUser", smtpUser);
+            SetConfig("tixtalk:smtpPassword", smtpPassword, secret: true);
+            SetConfig("tixtalk:mailFrom", mailFrom);
         }
 
         if (configureCloudflare)
         {
-            SetConfig("pre-talx-tix:cloudflareApiToken", cfToken, secret: true);
-            SetConfig("pre-talx-tix:cloudflareZoneId", cfZoneId);
+            SetConfig("tixtalk:cloudflareApiToken", cfToken, secret: true);
+            SetConfig("tixtalk:cloudflareZoneId", cfZoneId);
             if (cfDnsChallenge)
-                SetConfig("pre-talx-tix:cloudflareDnsChallenge", "true");
+                SetConfig("tixtalk:cloudflareDnsChallenge", "true");
         }
 
         // Run pulumi up
@@ -260,7 +260,7 @@ public static partial class Provision
                     "Service. To fix this:\n\n" +
                     "  1. Remove the domain from the other ACS instance\n" +
                     "     (Portal → Communication Services → Email → Domains)\n" +
-                    "  2. Re-run [yellow]ptx provision[/]\n\n" +
+                    "  2. Re-run [yellow]tixtalk provision[/]\n\n" +
                     "Or retry with [green]Azure-managed domain[/] to avoid the conflict.")
                     .Header("[yellow]Possible cause: ACS domain conflict[/]")
                     .Border(BoxBorder.Rounded)
@@ -273,7 +273,7 @@ public static partial class Provision
         // Get outputs
         var vmIp = GetPulumiOutput("vmPublicIp");
 
-        // Configure ptx CLI to connect to the new VM
+        // Configure tixtalk CLI to connect to the new VM
         AnsiConsole.WriteLine();
         AnsiConsole.Write(new Rule("[blue]Step 3/3: Connecting CLI to new server[/]").RuleStyle("blue"));
 
@@ -281,7 +281,7 @@ public static partial class Provision
         {
             var config = AppConfig.Load();
             config.Host = $"azureuser@{vmIp}";
-            config.ProjectDir = "/opt/pretalxtix";
+            config.ProjectDir = "/opt/tixtalk";
 
             // Try to find the private key matching the public key
             var privateKeyPath = sshKeyPath.Replace(".pub", "");
@@ -380,10 +380,10 @@ public static partial class Provision
         }
 
         AnsiConsole.MarkupLine("Once cloud-init finishes, manage your server with:");
-        AnsiConsole.MarkupLine("  [yellow]ptx status[/]     — check service health");
-        AnsiConsole.MarkupLine("  [yellow]ptx logs[/]       — view logs");
-        AnsiConsole.MarkupLine("  [yellow]ptx update[/]     — update container images");
-        AnsiConsole.MarkupLine("  [yellow]ptx backup[/]     — manual backup");
+        AnsiConsole.MarkupLine("  [yellow]tixtalk status[/]     — check service health");
+        AnsiConsole.MarkupLine("  [yellow]tixtalk logs[/]       — view logs");
+        AnsiConsole.MarkupLine("  [yellow]tixtalk update[/]     — update container images");
+        AnsiConsole.MarkupLine("  [yellow]tixtalk backup[/]     — manual backup");
 
         return 0;
     }

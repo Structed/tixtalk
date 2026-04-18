@@ -2,7 +2,7 @@ using System.Diagnostics;
 using Renci.SshNet;
 using Spectre.Console;
 
-namespace PreTalxTix.Cli;
+namespace TixTalk.Cli;
 
 public sealed class Remote
 {
@@ -332,7 +332,7 @@ public sealed class Remote
     {
         if (!_config.IsConfigured)
         {
-            AnsiConsole.MarkupLine("[red]Not connected.[/] Run [yellow]ptx connect <user@host>[/] first.");
+            AnsiConsole.MarkupLine("[red]Not connected.[/] Run [yellow]tixtalk connect <user@host>[/] first.");
             Environment.Exit(1);
         }
     }

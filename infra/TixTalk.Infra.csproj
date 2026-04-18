@@ -5,7 +5,8 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>PreTalxTix.Infra</RootNamespace>
+    <RootNamespace>TixTalk.Infra</RootNamespace>
+    <AssemblyName>tixtalk-infra</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>

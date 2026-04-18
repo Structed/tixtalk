@@ -1,7 +1,7 @@
 using Pulumi;
 using Pulumi.Cloudflare;
 
-namespace PreTalxTix.Infra.Infrastructure;
+namespace TixTalk.Infra.Infrastructure;
 
 public record CloudflareDnsArgs
 {
@@ -24,8 +24,8 @@ public record CloudflareDnsArgs
 /// </summary>
 public static class CloudflareDnsStack
 {
-    private const string Comment = "Managed by ptx";
-    private const string AcsComment = "Managed by ptx (ACS email)";
+    private const string Comment = "Managed by tixtalk";
+    private const string AcsComment = "Managed by tixtalk (ACS email)";
 
     public static void Create(CloudflareDnsArgs args)
     {

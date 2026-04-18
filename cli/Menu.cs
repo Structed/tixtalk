@@ -1,6 +1,6 @@
 using Spectre.Console;
 
-namespace PreTalxTix.Cli;
+namespace TixTalk.Cli;
 
 public static class Menu
 {

@@ -177,8 +177,8 @@ cmd_remote() {
     local host="$1"
     shift
 
-    # Find project directory on remote (default: ~/pre-talx-tix-azure)
-    local remote_dir="~/pre-talx-tix-azure"
+    # Find project directory on remote (default: ~/tixtalk)
+    local remote_dir="~/tixtalk"
 
     if [ $# -eq 0 ]; then
         # Interactive: SSH with TTY and run manage.sh
