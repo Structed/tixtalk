@@ -12,7 +12,7 @@ partial class Build : NukeBuild
 
     static readonly string[] RuntimeIdentifiers = ["win-x64", "linux-x64"];
 
-    AbsolutePath CliProject => RootDirectory / "cli" / "PreTalxTix.Cli.csproj";
+    AbsolutePath CliProject => RootDirectory / "cli" / "TixTalk.Cli.csproj";
     AbsolutePath OutputDirectory => RootDirectory / "output";
     AbsolutePath PublishDirectory => OutputDirectory / "publish";
     AbsolutePath PackagesDirectory => OutputDirectory / "packages";

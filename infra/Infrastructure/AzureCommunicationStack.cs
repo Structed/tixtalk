@@ -5,7 +5,7 @@ using Pulumi.AzureNative.Communication;
 using Pulumi.AzureNative.Resources;
 using Guid = System.Guid;
 
-namespace PreTalxTix.Infra.Infrastructure;
+namespace TixTalk.Infra.Infrastructure;
 
 /// <summary>
 /// Output record for ACS Email resources.

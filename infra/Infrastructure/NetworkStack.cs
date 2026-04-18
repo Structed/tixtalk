@@ -3,7 +3,7 @@ using Pulumi.AzureNative.Network;
 using Pulumi.AzureNative.Resources;
 using NetworkInputs = Pulumi.AzureNative.Network.Inputs;
 
-namespace PreTalxTix.Infra.Infrastructure;
+namespace TixTalk.Infra.Infrastructure;
 
 public record NetworkResult(
     VirtualNetwork Vnet,

@@ -15,7 +15,7 @@ partial class Build
             PackagesDirectory.CreateOrCleanDirectory();
 
             // Windows: zip
-            var winZip = PackagesDirectory / "ptx-win-x64.zip";
+            var winZip = PackagesDirectory / "tixtalk-win-x64.zip";
             ZipFile.CreateFromDirectory(
                 PublishDirectory / "win-x64",
                 winZip);
@@ -25,12 +25,12 @@ partial class Build
             var nfpmConfig = RootDirectory / "nfpm.yaml";
 
             Nfpm(
-                $"package -f {nfpmConfig} -p deb -t {PackagesDirectory / "ptx-linux-amd64.deb"}",
+                $"package -f {nfpmConfig} -p deb -t {PackagesDirectory / "tixtalk-linux-amd64.deb"}",
                 workingDirectory: RootDirectory);
             Serilog.Log.Information("Created .deb package");
 
             Nfpm(
-                $"package -f {nfpmConfig} -p rpm -t {PackagesDirectory / "ptx-linux-amd64.rpm"}",
+                $"package -f {nfpmConfig} -p rpm -t {PackagesDirectory / "tixtalk-linux-amd64.rpm"}",
                 workingDirectory: RootDirectory);
             Serilog.Log.Information("Created .rpm package");
         });

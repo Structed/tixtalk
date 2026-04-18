@@ -1,7 +1,7 @@
 using System.Text;
 using Pulumi;
 
-namespace PreTalxTix.Infra.Helpers;
+namespace TixTalk.Infra.Helpers;
 
 public record CloudInitConfig
 {
@@ -95,7 +95,7 @@ public static class CloudInitBuilder
         sb.Append("  - jq\n"); // For JSON parsing of ACS verification records
         sb.Append("\n");
         sb.Append("write_files:\n");
-        sb.Append("  - path: /opt/pretalxtix-env\n");
+        sb.Append("  - path: /opt/tixtalk-env\n");
         sb.Append("    encoding: b64\n");
         sb.Append($"    content: {envBase64}\n");
         sb.Append("  - path: /opt/setup.sh\n");
@@ -144,8 +144,8 @@ public static class CloudInitBuilder
         var sb = new StringBuilder();
         sb.Append("#!/bin/bash\n");
         sb.Append("set -euo pipefail\n");
-        sb.Append("exec > >(tee -a /var/log/pretalxtix-setup.log) 2>&1\n");
-        sb.Append("echo '=== PreTalxTix setup started ==='\n");
+        sb.Append("exec > >(tee -a /var/log/tixtalk-setup.log) 2>&1\n");
+        sb.Append("echo '=== tixtalk setup started ==='\n");
         sb.Append("\n");
         
         // Define helper functions at the top for reuse
@@ -219,18 +219,18 @@ retry() {
         // Clone the repo (using retry helper)
         sb.Append("echo 'Cloning repository...'\n");
         var branchArg = string.IsNullOrEmpty(cfg.RepoBranch) ? "" : $" -b {cfg.RepoBranch}";
-        sb.Append($"retry 'Git clone' 'git clone{branchArg} {cfg.RepoUrl} /opt/pretalxtix' 3 10 || exit 1\n");
+        sb.Append($"retry 'Git clone' 'git clone{branchArg} {cfg.RepoUrl} /opt/tixtalk' 3 10 || exit 1\n");
         sb.Append("\n");
 
         // Move .env file into place
-        sb.Append("mv /opt/pretalxtix-env /opt/pretalxtix/.env\n");
+        sb.Append("mv /opt/tixtalk-env /opt/tixtalk/.env\n");
         sb.Append("\n");
 
         // Set up Cloudflare DNS records if configured
         if (!string.IsNullOrEmpty(cfg.CloudflareApiToken))
         {
             sb.Append("echo 'Setting up Cloudflare DNS records...'\n");
-            sb.Append("cd /opt/pretalxtix\n");
+            sb.Append("cd /opt/tixtalk\n");
             sb.Append("bash scripts/cloudflare-dns.sh || echo 'WARNING: Cloudflare DNS setup failed'\n");
             sb.Append("\n");
             
@@ -238,7 +238,7 @@ retry() {
             if (!string.IsNullOrEmpty(acsVerificationRecords))
             {
                 sb.Append("echo 'Setting up Azure Communication Services email DNS records...'\n");
-                sb.Append("source /opt/pretalxtix/.env\n");
+                sb.Append("source /opt/tixtalk/.env\n");
                 // Store the verification records JSON
                 var escapedRecords = acsVerificationRecords.Replace("'", "'\\''");
                 sb.Append($"ACS_RECORDS='{escapedRecords}'\n");
@@ -320,7 +320,7 @@ fi
 
         // Start services - use DNS challenge compose file if configured
         sb.Append("echo 'Starting services...'\n");
-        sb.Append("cd /opt/pretalxtix\n");
+        sb.Append("cd /opt/tixtalk\n");
         if (cfg.CloudflareDnsChallenge == "true")
         {
             sb.Append("docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d --build\n");
@@ -378,6 +378,33 @@ done
         // Note: pretix/pretalx standalone containers handle migrations and static files automatically on startup.
         // Do NOT run 'pretix rebuild' or 'pretalx rebuild' here - it causes migration race conditions.
 
+        // Wait for migrations to complete before creating superuser accounts
+        sb.Append(@"# Wait for pretix migrations to finish (standalone container runs them on startup)
+echo 'Waiting for pretix migrations to complete...'
+for i in $(seq 1 30); do
+    if docker compose exec -T pretix pretix migrate --check >/dev/null 2>&1; then
+        echo 'Pretix migrations complete.'
+        break
+    fi
+    [ ""$i"" -eq 30 ] && echo 'WARNING: Pretix migration timeout, continuing...'
+    echo ""  Waiting for pretix migrations... ($i/30)""
+    sleep 20
+done
+
+# Wait for pretalx migrations to finish
+echo 'Waiting for pretalx migrations to complete...'
+for i in $(seq 1 30); do
+    if docker compose exec -T pretalx pretalx migrate --check >/dev/null 2>&1; then
+        echo 'Pretalx migrations complete.'
+        break
+    fi
+    [ ""$i"" -eq 30 ] && echo 'WARNING: Pretalx migration timeout, continuing...'
+    echo ""  Waiting for pretalx migrations... ($i/30)""
+    sleep 20
+done
+");
+        sb.Append("\n");
+
         // Create superuser accounts if admin email is configured
         if (!string.IsNullOrEmpty(cfg.AdminEmail))
         {
@@ -408,7 +435,7 @@ done
         sb.Append("echo 'Installing backup cron job...'\n");
         sb.Append("bash scripts/backup.sh --install-cron || echo 'WARNING: Failed to install backup cron'\n");
         sb.Append("\n");
-        sb.Append("echo '=== PreTalxTix setup complete ==='\n");
+        sb.Append("echo '=== tixtalk setup complete ==='\n");
 
         return sb.ToString();
     }

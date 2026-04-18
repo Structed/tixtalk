@@ -21,10 +21,10 @@ By default, the Azure NSG allows SSH (port 22) from any IP address. For producti
 
 ```bash
 # Restrict SSH to your office/VPN IP ranges
-pulumi config set pre-talx-tix:sshAllowedCidrs '["203.0.113.0/24", "198.51.100.0/24"]'
+pulumi config set tixtalk:sshAllowedCidrs '["203.0.113.0/24", "198.51.100.0/24"]'
 
 # Or allow only a single IP
-pulumi config set pre-talx-tix:sshAllowedCidrs '["203.0.113.42/32"]'
+pulumi config set tixtalk:sshAllowedCidrs '["203.0.113.42/32"]'
 
 # Re-deploy to apply
 pulumi up
@@ -87,7 +87,7 @@ pulumi stack output
 2. Or manually:
    ```bash
    # On the VM
-   docker compose exec postgres psql -U pretalxtix -c "ALTER USER pretalxtix PASSWORD 'new_password';"
+   docker compose exec postgres psql -U tixtalk -c "ALTER USER tixtalk PASSWORD 'new_password';"
    
    # Update .env
    sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD=new_password/' .env
@@ -104,28 +104,28 @@ pulumi stack output
 
 ### On-Demand SSH Access (Azure Deployments)
 
-For Azure deployments, you can dynamically control SSH access using the `ptx` CLI. This lets you keep SSH closed by default and only open it when needed.
+For Azure deployments, you can dynamically control SSH access using the `tixtalk` CLI. This lets you keep SSH closed by default and only open it when needed.
 
 ```bash
 # Open SSH access from your current public IP
-ptx ssh open
+tixtalk ssh open
 
 # Open SSH from a specific IP/CIDR
-ptx ssh open 203.0.113.42/32
+tixtalk ssh open 203.0.113.42/32
 
 # Check current SSH access status
-ptx ssh status
+tixtalk ssh status
 
 # Close SSH access (sets NSG rule to deny)
-ptx ssh close
+tixtalk ssh close
 ```
 
-**Menu option:** The interactive menu (`ptx`) also has "Open SSH access", "Close SSH access", and "SSH access status" options under "Azure SSH Access".
+**Menu option:** The interactive menu (`tixtalk`) also has "Open SSH access", "Close SSH access", and "SSH access status" options under "Azure SSH Access".
 
-**Setup:** If you used `ptx provision`, Azure resource info is automatically saved. For existing deployments, configure manually:
+**Setup:** If you used `tixtalk provision`, Azure resource info is automatically saved. For existing deployments, configure manually:
 
 ```bash
-ptx ssh config
+tixtalk ssh config
 # Enter: Resource Group name and NSG name
 ```
 
@@ -200,10 +200,10 @@ Or check in Azure Portal:
    ssh azureuser@your-vm-ip
    
    # Update SMTP_PASSWORD in .env
-   nano /opt/pretalxtix/.env
+   nano /opt/tixtalk/.env
    
    # Restart services
-   cd /opt/pretalxtix
+   cd /opt/tixtalk
    docker compose restart pretix pretalx
    ```
 
@@ -248,7 +248,7 @@ By default, backups are only stored on the VM. For disaster recovery, copy them 
 az storage blob upload-batch \
   --account-name mystorageaccount \
   --destination backups \
-  --source /opt/pretalxtix/backups
+  --source /opt/tixtalk/backups
 ```
 
 ### Backup Retention

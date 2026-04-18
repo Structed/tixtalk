@@ -3,7 +3,7 @@
 Self-hosted [pretix](https://pretix.eu/) (ticketing) and [pretalx](https://pretalx.com/) (call for papers & scheduling) on an Azure VM. One command provisions the infrastructure, installs Docker, deploys all services, runs migrations, and sets up daily backups.
 
 ```bash
-ptx provision    # Interactive wizard → fully running deployment
+tixtalk provision    # Interactive wizard → fully running deployment
 ```
 
 ## What You Get
@@ -62,7 +62,7 @@ The interactive wizard asks for your domain, SSH key, and Azure region, then:
 1. Configures Pulumi stack settings
 2. Provisions the Azure VM and networking (`pulumi up`)
 3. VM cloud-init installs Docker, clones repo, starts services, runs migrations, and sets up daily backups
-4. Configures the `ptx` CLI to connect to the new server
+4. Configures the `tixtalk` CLI to connect to the new server
 
 After ~5 minutes your apps are live. Point DNS and visit them:
 - **Pretix**: `https://tickets.yourdomain.com`
@@ -79,18 +79,18 @@ cd infra
 pulumi stack init dev
 
 # Required config
-pulumi config set pre-talx-tix:domain yourdomain.com
-pulumi config set pre-talx-tix:sshPublicKey "$(cat ~/.ssh/id_rsa.pub)"
+pulumi config set tixtalk:domain yourdomain.com
+pulumi config set tixtalk:sshPublicKey "$(cat ~/.ssh/id_rsa.pub)"
 
 # Optional — email (required for ticket confirmations & CfP notifications)
-pulumi config set pre-talx-tix:smtpHost smtp.example.com
-pulumi config set pre-talx-tix:smtpUser user@example.com
-pulumi config set pre-talx-tix:smtpPassword YOUR_PASSWORD --secret
-pulumi config set pre-talx-tix:mailFrom noreply@yourdomain.com
+pulumi config set tixtalk:smtpHost smtp.example.com
+pulumi config set tixtalk:smtpUser user@example.com
+pulumi config set tixtalk:smtpPassword YOUR_PASSWORD --secret
+pulumi config set tixtalk:mailFrom noreply@yourdomain.com
 
 # Optional — Cloudflare DNS automation
-pulumi config set pre-talx-tix:cloudflareApiToken YOUR_TOKEN --secret
-pulumi config set pre-talx-tix:cloudflareZoneId YOUR_ZONE_ID
+pulumi config set tixtalk:cloudflareApiToken YOUR_TOKEN --secret
+pulumi config set tixtalk:cloudflareZoneId YOUR_ZONE_ID
 ```
 
 Then deploy, set up DNS, and access your apps:
@@ -132,25 +132,25 @@ All configuration is managed via Pulumi config (`pulumi config set <key> <value>
 
 | Pulumi Config Key | Required | Default | `.env` Equivalent | Description |
 |-------------------|----------|---------|-------------------|-------------|
-| `pre-talx-tix:domain` | Yes | — | `DOMAIN` | Your domain (e.g., `yourdomain.com`) |
-| `pre-talx-tix:sshPublicKey` | Yes | — | — | SSH public key for VM access |
-| `pre-talx-tix:prefix` | No | `pretalxtix` | — | Azure resource name prefix |
-| `pre-talx-tix:vmSize` | No | `Standard_B2s` | — | Azure VM SKU |
-| `pre-talx-tix:sshAllowedCidrs` | No | `["*"]` | — | JSON array of CIDR ranges allowed for SSH (see [Security](#security)) |
+| `tixtalk:domain` | Yes | — | `DOMAIN` | Your domain (e.g., `yourdomain.com`) |
+| `tixtalk:sshPublicKey` | Yes | — | — | SSH public key for VM access |
+| `tixtalk:prefix` | No | `tixtalk` | — | Azure resource name prefix |
+| `tixtalk:vmSize` | No | `Standard_B2s` | — | Azure VM SKU |
+| `tixtalk:sshAllowedCidrs` | No | `["*"]` | — | JSON array of CIDR ranges allowed for SSH (see [Security](#security)) |
 | `azure-native:location` | No | `westeurope` | — | Azure region |
-| `pre-talx-tix:cloudflareApiToken` | No | — | `CLOUDFLARE_API_TOKEN` | Cloudflare API token (use `--secret`) |
-| `pre-talx-tix:cloudflareZoneId` | No | — | `CLOUDFLARE_ZONE_ID` | Cloudflare Zone ID |
-| `pre-talx-tix:cloudflareDnsChallenge` | No | `false` | `CLOUDFLARE_DNS_CHALLENGE` | Use DNS challenge for TLS |
-| `pre-talx-tix:useAzureMail` | No | `true` | — | Use Azure Communication Services for email |
-| `pre-talx-tix:acsUseCustomDomain` | No | `false` | — | Use custom domain for ACS (requires Cloudflare) |
-| `pre-talx-tix:mailFrom` | No | `noreply@example.com` | `MAIL_FROM` | Email sender address |
-| `pre-talx-tix:smtpHost` | No | — | `SMTP_HOST` | SMTP server hostname |
-| `pre-talx-tix:smtpPort` | No | `587` | `SMTP_PORT` | SMTP server port |
-| `pre-talx-tix:smtpUser` | No | — | `SMTP_USER` | SMTP username |
-| `pre-talx-tix:smtpPassword` | No | — | `SMTP_PASSWORD` | SMTP password (use `--secret`) |
-| `pre-talx-tix:pretixImageTag` | No | `stable` | `PRETIX_IMAGE_TAG` | Pretix Docker image tag |
-| `pre-talx-tix:pretalxImageTag` | No | `latest` | `PRETALX_IMAGE_TAG` | Pretalx Docker image tag |
-| `pre-talx-tix:repoUrl` | No | *(this repo)* | — | Git repo to clone on VM |
+| `tixtalk:cloudflareApiToken` | No | — | `CLOUDFLARE_API_TOKEN` | Cloudflare API token (use `--secret`) |
+| `tixtalk:cloudflareZoneId` | No | — | `CLOUDFLARE_ZONE_ID` | Cloudflare Zone ID |
+| `tixtalk:cloudflareDnsChallenge` | No | `false` | `CLOUDFLARE_DNS_CHALLENGE` | Use DNS challenge for TLS |
+| `tixtalk:useAzureMail` | No | `true` | — | Use Azure Communication Services for email |
+| `tixtalk:acsUseCustomDomain` | No | `false` | — | Use custom domain for ACS (requires Cloudflare) |
+| `tixtalk:mailFrom` | No | `noreply@example.com` | `MAIL_FROM` | Email sender address |
+| `tixtalk:smtpHost` | No | — | `SMTP_HOST` | SMTP server hostname |
+| `tixtalk:smtpPort` | No | `587` | `SMTP_PORT` | SMTP server port |
+| `tixtalk:smtpUser` | No | — | `SMTP_USER` | SMTP username |
+| `tixtalk:smtpPassword` | No | — | `SMTP_PASSWORD` | SMTP password (use `--secret`) |
+| `tixtalk:pretixImageTag` | No | `stable` | `PRETIX_IMAGE_TAG` | Pretix Docker image tag |
+| `tixtalk:pretalxImageTag` | No | `latest` | `PRETALX_IMAGE_TAG` | Pretalx Docker image tag |
+| `tixtalk:repoUrl` | No | *(this repo)* | — | Git repo to clone on VM |
 
 ## Security
 
@@ -161,7 +161,7 @@ For production deployments, see [SECURITY.md](SECURITY.md) for detailed security
 By default, SSH is open to any IP. Restrict it with:
 
 ```bash
-pulumi config set pre-talx-tix:sshAllowedCidrs '["203.0.113.0/24", "198.51.100.42/32"]'
+pulumi config set tixtalk:sshAllowedCidrs '["203.0.113.0/24", "198.51.100.42/32"]'
 pulumi up
 ```
 
@@ -169,29 +169,29 @@ pulumi up
 
 Once deployed, manage your server with the cross-platform .NET CLI or directly via SSH.
 
-### Cross-platform .NET CLI (`ptx`)
+### Cross-platform .NET CLI (`tixtalk`)
 
 Runs on **Windows, macOS, and Linux**. Manages your remote server over SSH.
 
 ```bash
 # Provision a new server (one-command setup)
-ptx provision
+tixtalk provision
 
 # Or connect to an existing server
-ptx connect azureuser@your-server-ip
+tixtalk connect azureuser@your-server-ip
 
 # Then manage from anywhere
-ptx                      # Interactive menu (Spectre.Console UI)
-ptx status               # Service status + URLs
-ptx update               # Pull latest images + restart
-ptx logs pretix          # Tail pretix logs
-ptx backup               # Backup databases
-ptx help                 # All commands
+tixtalk                      # Interactive menu (Spectre.Console UI)
+tixtalk status               # Service status + URLs
+tixtalk update               # Pull latest images + restart
+tixtalk logs pretix          # Tail pretix logs
+tixtalk backup               # Backup databases
+tixtalk help                 # All commands
 
 # Control SSH access (Azure deployments only)
-ptx ssh open             # Open SSH from your current IP
-ptx ssh close            # Block all SSH access
-ptx ssh status           # Show SSH access state
+tixtalk ssh open             # Open SSH from your current IP
+tixtalk ssh close            # Block all SSH access
+tixtalk ssh status           # Show SSH access state
 ```
 
 #### Install the CLI
@@ -273,7 +273,7 @@ Both apps are multi-tenant — create new events in the web UI each year. No inf
 
 ## Azure Communication Services (Email)
 
-When using `ptx provision`, you can enable **Azure Communication Services** for email delivery. This is the recommended option when deploying to Azure.
+When using `tixtalk provision`, you can enable **Azure Communication Services** for email delivery. This is the recommended option when deploying to Azure.
 
 ### How it works
 
@@ -282,22 +282,22 @@ When using `ptx provision`, you can enable **Azure Communication Services** for 
 | ✓ Configured | Custom domain | `noreply@yourdomain.com` |
 | ✗ Not configured | Azure-managed | `noreply@xxx.azurecomm.net` |
 
-When using `ptx provision`, you'll be prompted to choose between custom domain (requires Cloudflare) or Azure-managed domain.
+When using `tixtalk provision`, you'll be prompted to choose between custom domain (requires Cloudflare) or Azure-managed domain.
 
 ### Configuration
 
 ```bash
 # Enable ACS email (default: true)
-pulumi config set pre-talx-tix:useAzureMail true
+pulumi config set tixtalk:useAzureMail true
 
 # Use custom domain (requires Cloudflare)
-pulumi config set pre-talx-tix:acsUseCustomDomain true
+pulumi config set tixtalk:acsUseCustomDomain true
 
 # Or use Azure-managed domain (default, no Cloudflare needed)
-pulumi config set pre-talx-tix:acsUseCustomDomain false
+pulumi config set tixtalk:acsUseCustomDomain false
 
 # Disable ACS entirely (use manual SMTP)
-pulumi config set pre-talx-tix:useAzureMail false
+pulumi config set tixtalk:useAzureMail false
 ```
 
 ### Limitations
@@ -321,8 +321,8 @@ pulumi config set pre-talx-tix:useAzureMail false
 4. Set via Pulumi config:
 
 ```bash
-pulumi config set pre-talx-tix:cloudflareApiToken YOUR_TOKEN --secret
-pulumi config set pre-talx-tix:cloudflareZoneId YOUR_ZONE_ID
+pulumi config set tixtalk:cloudflareApiToken YOUR_TOKEN --secret
+pulumi config set tixtalk:cloudflareZoneId YOUR_ZONE_ID
 ```
 
 ### TLS modes
@@ -334,7 +334,7 @@ pulumi config set pre-talx-tix:cloudflareZoneId YOUR_ZONE_ID
 
 To use DNS challenge:
 ```bash
-pulumi config set pre-talx-tix:cloudflareDnsChallenge true
+pulumi config set tixtalk:cloudflareDnsChallenge true
 ```
 
 This builds a custom Caddy image with the Cloudflare plugin (first deploy takes ~1 min longer).
@@ -360,7 +360,7 @@ Caddy auto-provisions Let's Encrypt certs. Ensure:
 
 ### Database connection issues
 ```bash
-docker compose exec postgres psql -U pretalxtix -l
+docker compose exec postgres psql -U tixtalk -l
 ```
 
 ### Restart everything
@@ -385,7 +385,7 @@ If you already have a VPS (or prefer not to use Pulumi), you can deploy directly
 
 ```bash
 git clone <this-repo>
-cd pre-talx-tix-azure
+cd tixtalk
 
 # Install Docker if needed
 ./manage.sh setup

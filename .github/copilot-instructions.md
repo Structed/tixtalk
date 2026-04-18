@@ -19,7 +19,7 @@ There are no tests or linters configured in this project.
 
 This project deploys [pretix](https://pretix.eu/) (ticketing) and [pretalx](https://pretalx.com/) (CfP/scheduling) to an Azure VM. It has two deployment paths:
 
-1. **Automated (recommended)**: `ptx provision` — interactive wizard provisions an Azure VM via Pulumi, runs cloud-init to install Docker, clone the repo, write `.env`, start services, run migrations, and set up daily backups.
+1. **Automated (recommended)**: `tixtalk provision` — interactive wizard provisions an Azure VM via Pulumi, runs cloud-init to install Docker, clone the repo, write `.env`, start services, run migrations, and set up daily backups.
 2. **Manual VPS**: Clone the repo on any Ubuntu/Debian server, configure `.env`, and run `manage.sh deploy`.
 
 **Services** (defined in `docker-compose.yml`):
@@ -51,7 +51,7 @@ Resource Group
 All docker-compose configuration is via `.env` (copied from `.env.example`). For Pulumi deployments, secrets are auto-generated and injected via cloud-init.
 
 The primary user interfaces are:
-- **`ptx` CLI** (cross-platform .NET app in `cli/`) — provisions Azure VMs, manages remote servers over SSH
+- **`tixtalk` CLI** (cross-platform .NET app in `cli/`) — provisions Azure VMs, manages remote servers over SSH
 - **`manage.sh`** (bash, on-server) — interactive menu or subcommands (e.g., `./manage.sh status`). Supports remote management via `./manage.sh remote user@host [cmd]`.
 
 ## Conventions
@@ -83,8 +83,8 @@ A single Redis instance is shared; apps are isolated by database number:
 
 ### Env var formats
 
-- **Pretix**: `PRETIX_{SECTION}_{KEY}` — e.g., `PRETIX_DATABASE_HOST`
-- **Pretalx**: `PRETALX_{SECTION}_{KEY}` — e.g., `PRETALX_DATABASE_HOST`
+- **Pretix**: `PRETIX_{SECTION}_{KEY}` — e.g., `PRETIX_DATABASE_HOST`, `PRETIX_REDIS_LOCATION`
+- **Pretalx**: `PRETALX_{SECTION}_{KEY}` — e.g., `PRETALX_DB_TYPE`, `PRETALX_DB_HOST`, `PRETALX_DB_PASS` (note: `_PASS` not `_PASSWORD`; `PRETALX_REDIS` not `PRETALX_REDIS_LOCATION`; does **not** support `DATABASE_URL`)
 
 ### TLS and DNS
 
@@ -105,7 +105,7 @@ A cross-platform .NET 8 console app for Azure provisioning and remote server man
 
 Structure:
 - `Program.cs` — entry point, command dispatch (no args = interactive menu; `provision` = Azure wizard)
-- `Config.cs` — manages `~/.pretalxtix/config.json` (SSH host, key file, remote project dir). Uses source-generated JSON serialization.
+- `Config.cs` — manages `~/.tixtalk/config.json` (SSH host, key file, remote project dir). Uses source-generated JSON serialization.
 - `Remote.cs` — SSH execution (SSH.NET for commands, native ssh for TTY)
 - `Menu.cs` — Spectre.Console selection prompt, mirrors manage.sh menu. First-run flow offers "Provision new server (Azure)" or "Connect to existing server".
 - `Provision.cs` — interactive Azure provisioning wizard. Gathers domain, SSH key, region, VM size, admin email, email provider (ACS or manual SMTP), and Cloudflare config. Drives Pulumi (`pulumi stack init`, `pulumi config set`, `pulumi up`) against the `infra/` project, then auto-configures the CLI to connect to the new VM.
@@ -114,7 +114,7 @@ The CLI proxies most commands to `manage.sh` on the remote server — it's a cro
 
 ### Pulumi infrastructure (`infra/`)
 
-A .NET 8 Pulumi project (`PreTalxTix.Infra`) that provisions Azure resources. Uses `Pulumi.AzureNative`, `Pulumi.AzureAD`, and `Pulumi.Random`.
+A .NET 8 Pulumi project (`TixTalk.Infra`) that provisions Azure resources. Uses `Pulumi.AzureNative`, `Pulumi.AzureAD`, and `Pulumi.Random`.
 
 Structure:
 - `Program.cs` — Pulumi entry point, reads config, orchestrates all stacks, defines outputs
@@ -125,7 +125,7 @@ Structure:
 - `Helpers/SecretGenerator.cs` — auto-generates DB password, secret keys, admin password (encrypted in Pulumi state)
 - `Helpers/CloudInitBuilder.cs` — builds the cloud-init script that bootstraps Docker, clones the repo, writes `.env`, starts services, runs migrations, and sets up backups
 
-Key Pulumi config keys (set via `pulumi config set pre-talx-tix:<key>`):
+Key Pulumi config keys (set via `pulumi config set tixtalk:<key>`):
 - `domain` (required), `sshPublicKey` (required)
 - `prefix`, `vmSize`, `adminEmail`, `repoUrl`, `repoBranch`
 - `useAzureMail`, `acsUseCustomDomain`
@@ -141,10 +141,10 @@ Uses **Nuke.Build** (.NET build automation). The build project is at `build/_bui
 
 **Targets** (in dependency order):
 - `Clean` → removes `output/` and `cli/bin/`, `cli/obj/`
-- `Restore` → `dotnet restore` on `cli/PreTalxTix.Cli.csproj`
+- `Restore` → `dotnet restore` on `cli/TixTalk.Cli.csproj`
 - `Compile` → `dotnet build` (default target)
 - `Publish` → self-contained, trimmed, single-file publish for `win-x64` and `linux-x64` into `output/publish/{rid}/`
-- `Package` → creates `output/packages/ptx-win-x64.zip`, `.deb`, and `.rpm` (requires `nfpm` on PATH)
+- `Package` → creates `output/packages/tixtalk-win-x64.zip`, `.deb`, and `.rpm` (requires `nfpm` on PATH)
 
 **Linux packaging**: `nfpm.yaml` at repo root defines `.deb` and `.rpm` package metadata. The `VERSION` env var sets the package version.
 

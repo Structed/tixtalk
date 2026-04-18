@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Net.Http;
 using Spectre.Console;
 
-namespace PreTalxTix.Cli;
+namespace TixTalk.Cli;
 
 /// <summary>
 /// Manages SSH access to Azure VMs by updating NSG rules via Azure CLI.
@@ -29,7 +29,7 @@ public static class SshAccess
             if (string.IsNullOrWhiteSpace(sourceAddress))
             {
                 AnsiConsole.MarkupLine("[red]Error:[/] Could not determine your public IP address.");
-                AnsiConsole.MarkupLine("Try specifying a CIDR manually: [yellow]ptx ssh open 1.2.3.4/32[/]");
+                AnsiConsole.MarkupLine("Try specifying a CIDR manually: [yellow]tixtalk ssh open 1.2.3.4/32[/]");
                 return 1;
             }
             
@@ -218,8 +218,8 @@ public static class SshAccess
             return true;
         
         AnsiConsole.MarkupLine("[red]Error:[/] Azure resource info not configured.");
-        AnsiConsole.MarkupLine("Run [yellow]ptx ssh config[/] to set up Azure resource info,");
-        AnsiConsole.MarkupLine("or run [yellow]ptx provision[/] to deploy a new Azure VM.");
+        AnsiConsole.MarkupLine("Run [yellow]tixtalk ssh config[/] to set up Azure resource info,");
+        AnsiConsole.MarkupLine("or run [yellow]tixtalk provision[/] to deploy a new Azure VM.");
         return false;
     }
     

@@ -1,15 +1,15 @@
-name: ptx
+name: tixtalk
 arch: amd64
 platform: linux
 version: ${VERSION}
 maintainer: Pretix+Pretalx VPS project
 description: Cross-platform CLI for managing Pretix + Pretalx on a VPS
-homepage: https://github.com/your-org/pre-talx-tix-azure
+homepage: https://github.com/Structed/tixtalk
 license: MIT
 
 contents:
-  - src: ./output/publish/linux-x64/ptx
-    dst: /usr/local/bin/ptx
+  - src: ./output/publish/linux-x64/tixtalk
+    dst: /usr/local/bin/tixtalk
     file_info:
       mode: 0755
 

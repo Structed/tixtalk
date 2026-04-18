@@ -1,6 +1,6 @@
 using Pulumi.Random;
 
-namespace PreTalxTix.Infra.Helpers;
+namespace TixTalk.Infra.Helpers;
 
 public record GeneratedSecrets(
     RandomPassword DbPassword,

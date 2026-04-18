@@ -2,7 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Spectre.Console;
 
-namespace PreTalxTix.Cli;
+namespace TixTalk.Cli;
 
 [JsonSerializable(typeof(AppConfig))]
 [JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
@@ -12,7 +12,7 @@ public sealed class AppConfig
 {
     public string Host { get; set; } = "";
     public string KeyFile { get; set; } = "";
-    public string ProjectDir { get; set; } = "~/pre-talx-tix-azure";
+    public string ProjectDir { get; set; } = "~/tixtalk";
     
     // Azure resource info (for SSH access control)
     public string ResourceGroup { get; set; } = "";
@@ -20,7 +20,7 @@ public sealed class AppConfig
 
     private static readonly string ConfigDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        ".pretalxtix");
+        ".tixtalk");
 
     private static readonly string ConfigPath = Path.Combine(ConfigDir, "config.json");
 
