@@ -135,7 +135,7 @@ public static partial class Provision
                 cfToken = AnsiConsole.Prompt(
                     new TextPrompt<string>("Cloudflare API token:").Secret());
                 cfZoneId = AnsiConsole.Ask<string>("Cloudflare Zone ID:");
-                cfDnsChallenge = AnsiConsole.Confirm("Use DNS challenge for TLS (orange-cloud proxy)?", false);
+                cfDnsChallenge = AnsiConsole.Confirm("Use DNS challenge for TLS (orange-cloud proxy)?", true);
                 configureCloudflare = true;
             }
         }
@@ -153,13 +153,13 @@ public static partial class Provision
         // Optional: Cloudflare (if not already configured via ACS custom domain)
         if (!configureCloudflare)
         {
-            configureCloudflare = AnsiConsole.Confirm("Configure Cloudflare DNS automation?", false);
+            configureCloudflare = AnsiConsole.Confirm("Configure Cloudflare DNS automation?", true);
             if (configureCloudflare)
             {
                 cfToken = AnsiConsole.Prompt(
                     new TextPrompt<string>("Cloudflare API token:").Secret());
                 cfZoneId = AnsiConsole.Ask<string>("Cloudflare Zone ID:");
-                cfDnsChallenge = AnsiConsole.Confirm("Use DNS challenge for TLS (orange-cloud proxy)?", false);
+                cfDnsChallenge = AnsiConsole.Confirm("Use DNS challenge for TLS (orange-cloud proxy)?", true);
             }
         }
 

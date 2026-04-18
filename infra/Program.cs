@@ -17,7 +17,7 @@ return await Deployment.RunAsync(() =>
     // Optional config
     var cloudflareApiToken = config.Get("cloudflareApiToken") ?? "";
     var cloudflareZoneId = config.Get("cloudflareZoneId") ?? "";
-    var cloudflareDnsChallenge = config.Get("cloudflareDnsChallenge") ?? "false";
+    var cloudflareDnsChallenge = config.Get("cloudflareDnsChallenge") ?? "true";
     
     // SSH access restriction (optional - defaults to any)
     var sshAllowedCidrsJson = config.Get("sshAllowedCidrs");
