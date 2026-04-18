@@ -1,13 +1,23 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using Spectre.Console;
 
 namespace PreTalxTix.Cli;
 
-public static class Provision
+public static partial class Provision
 {
     private static readonly string InfraDir = Path.Combine(
         FindRepoRoot() ?? ".", "infra");
+
+    // Validation patterns
+    [GeneratedRegex(@"^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$")]
+    private static partial Regex DomainRegex();
+    
+    [GeneratedRegex(@"^[^@\s]+@[^@\s]+\.[^@\s]+$")]
+    private static partial Regex EmailRegex();
+    
+    [GeneratedRegex(@"^ssh-(rsa|ed25519|ecdsa|dss)\s+[A-Za-z0-9+/=]+")]
+    private static partial Regex SshKeyRegex();
 
     public static int Run()
     {
@@ -21,25 +31,51 @@ public static class Provision
         if (!CheckPrerequisite("pulumi", "--version", "Pulumi CLI"))
             return 1;
 
-        // Gather configuration
-        var domain = AnsiConsole.Ask<string>("Your [green]domain[/] (e.g., yourdomain.com):");
+        // Gather configuration with validation
+        var domain = AnsiConsole.Prompt(
+            new TextPrompt<string>("Your [green]domain[/] (e.g., yourdomain.com):")
+                .Validate(d => 
+                {
+                    if (string.IsNullOrWhiteSpace(d))
+                        return ValidationResult.Error("[red]Domain cannot be empty[/]");
+                    if (!DomainRegex().IsMatch(d))
+                        return ValidationResult.Error("[red]Invalid domain format. Example: yourdomain.com[/]");
+                    return ValidationResult.Success();
+                }));
 
         // Derive a resource name prefix from the domain (e.g., "godotfest.org" → "godotfest")
         var defaultPrefix = domain.Split('.')[0].ToLowerInvariant();
-        defaultPrefix = System.Text.RegularExpressions.Regex.Replace(defaultPrefix, "[^a-z0-9-]", "");
+        defaultPrefix = Regex.Replace(defaultPrefix, "[^a-z0-9-]", "");
         var prefix = AnsiConsole.Ask("Azure resource name [green]prefix[/]:", defaultPrefix);
 
         var sshKeyPath = DetectSshKey();
         sshKeyPath = AnsiConsole.Ask("SSH public key file:", sshKeyPath);
         var sshPublicKey = ReadSshPublicKey(sshKeyPath);
         if (sshPublicKey == null) return 1;
+        
+        // Validate SSH key format
+        if (!SshKeyRegex().IsMatch(sshPublicKey))
+        {
+            AnsiConsole.MarkupLine("[red]Invalid SSH public key format.[/]");
+            AnsiConsole.MarkupLine("[grey]Expected format: ssh-rsa AAAA... or ssh-ed25519 AAAA...[/]");
+            return 1;
+        }
 
         var region = AnsiConsole.Ask("Azure [green]region[/]:", "westeurope");
 
         var vmSize = AnsiConsole.Ask("VM size:", "Standard_B2s");
 
-        // Admin account (for pretix/pretalx control panels)
-        var adminEmail = AnsiConsole.Ask<string>("Admin [green]email[/] (for pretix/pretalx login):");
+        // Admin account (for pretix/pretalx control panels) with validation
+        var adminEmail = AnsiConsole.Prompt(
+            new TextPrompt<string>("Admin [green]email[/] (for pretix/pretalx login):")
+                .Validate(e =>
+                {
+                    if (string.IsNullOrWhiteSpace(e))
+                        return ValidationResult.Error("[red]Email cannot be empty[/]");
+                    if (!EmailRegex().IsMatch(e))
+                        return ValidationResult.Error("[red]Invalid email format[/]");
+                    return ValidationResult.Success();
+                }));
 
         // Email configuration - Azure Communication Services is the recommended default
         var useAzureMail = AnsiConsole.Confirm(
@@ -251,6 +287,15 @@ public static class Provision
             var privateKeyPath = sshKeyPath.Replace(".pub", "");
             if (File.Exists(privateKeyPath))
                 config.KeyFile = privateKeyPath;
+            
+            // Save Azure resource info for SSH access control
+            var resourceGroupName = GetPulumiOutput("resourceGroupName");
+            if (!string.IsNullOrWhiteSpace(resourceGroupName))
+            {
+                config.ResourceGroup = resourceGroupName;
+                config.NsgName = $"{prefix}-nsg";
+                AnsiConsole.MarkupLine($"[green]✓[/] Azure NSG info saved for SSH access control");
+            }
 
             config.Save();
             AnsiConsole.MarkupLine($"[green]✓[/] CLI configured to connect to [yellow]azureuser@{vmIp}[/]");

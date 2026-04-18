@@ -4,7 +4,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+source "$SCRIPT_DIR/lib/common.sh"
+
+init_project_dir
 cd "$PROJECT_DIR"
 
 echo "=== Deploying Pretix + Pretalx ==="
@@ -17,10 +19,8 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
-# Source .env to check values
-set -a
-source .env
-set +a
+# Load .env to check values
+load_env
 
 # Validate required config
 if [ -z "${DOMAIN:-}" ] || [ "$DOMAIN" = "yourdomain.com" ]; then
@@ -29,10 +29,6 @@ if [ -z "${DOMAIN:-}" ] || [ "$DOMAIN" = "yourdomain.com" ]; then
 fi
 
 # Generate secrets if empty
-generate_secret() {
-    openssl rand -base64 48 | tr -d '/+=' | head -c "$1"
-}
-
 CHANGED=false
 if [ -z "${DB_PASSWORD:-}" ]; then
     sed -i "s/^DB_PASSWORD=$/DB_PASSWORD=$(generate_secret 32)/" .env
@@ -67,11 +63,10 @@ else
     echo ""
 fi
 
-# Determine compose command based on TLS mode
-COMPOSE_CMD="docker compose"
+# Get compose command based on TLS mode
+COMPOSE_CMD=$(compose_cmd)
 if [ "${CLOUDFLARE_DNS_CHALLENGE:-false}" = "true" ]; then
     echo "Using Cloudflare DNS challenge for TLS (building custom Caddy image)..."
-    COMPOSE_CMD="docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml"
 fi
 
 # Pull images and start

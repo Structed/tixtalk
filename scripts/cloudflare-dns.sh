@@ -5,13 +5,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+source "$SCRIPT_DIR/lib/common.sh"
+
+init_project_dir
 cd "$PROJECT_DIR"
 
 # Load .env
-set -a
-source .env
-set +a
+load_env
 
 if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
     echo "CLOUDFLARE_API_TOKEN not set in .env — skipping DNS setup."

@@ -1,0 +1,358 @@
+using System.Diagnostics;
+using System.Net.Http;
+using Spectre.Console;
+
+namespace PreTalxTix.Cli;
+
+/// <summary>
+/// Manages SSH access to Azure VMs by updating NSG rules via Azure CLI.
+/// </summary>
+public static class SshAccess
+{
+    private const string SshRuleName = "AllowSSH";
+    
+    /// <summary>
+    /// Opens SSH access from the current public IP or a specified CIDR.
+    /// </summary>
+    public static int Open(AppConfig config, string? cidr = null)
+    {
+        if (!ValidateAzureConfig(config))
+            return 1;
+        
+        if (!ValidateAzureCli())
+            return 1;
+        
+        var sourceAddress = cidr;
+        if (string.IsNullOrWhiteSpace(sourceAddress))
+        {
+            sourceAddress = GetCurrentPublicIp();
+            if (string.IsNullOrWhiteSpace(sourceAddress))
+            {
+                AnsiConsole.MarkupLine("[red]Error:[/] Could not determine your public IP address.");
+                AnsiConsole.MarkupLine("Try specifying a CIDR manually: [yellow]ptx ssh open 1.2.3.4/32[/]");
+                return 1;
+            }
+            
+            // Ensure it's a CIDR if it's just an IP
+            if (!sourceAddress.Contains('/'))
+                sourceAddress = $"{sourceAddress}/32";
+        }
+        
+        AnsiConsole.MarkupLine($"Opening SSH access from [yellow]{sourceAddress}[/]...");
+        
+        var (exitCode, output) = RunAzCommand(
+            "network", "nsg", "rule", "update",
+            "--resource-group", config.ResourceGroup,
+            "--nsg-name", config.NsgName,
+            "--name", SshRuleName,
+            "--access", "Allow",
+            "--source-address-prefixes", sourceAddress
+        );
+        
+        if (exitCode == 0)
+        {
+            AnsiConsole.MarkupLine($"[green]✓[/] SSH access opened from [yellow]{sourceAddress}[/]");
+            AnsiConsole.MarkupLine($"  Connect with: [blue]ssh azureuser@{config.ParseHost().Hostname}[/]");
+        }
+        else
+        {
+            AnsiConsole.MarkupLine($"[red]Error:[/] Failed to update NSG rule.");
+            if (!string.IsNullOrWhiteSpace(output))
+                AnsiConsole.WriteLine(output);
+        }
+        
+        return exitCode;
+    }
+    
+    /// <summary>
+    /// Closes SSH access by setting the rule to deny.
+    /// </summary>
+    public static int Close(AppConfig config)
+    {
+        if (!ValidateAzureConfig(config))
+            return 1;
+        
+        if (!ValidateAzureCli())
+            return 1;
+        
+        AnsiConsole.MarkupLine("Closing SSH access...");
+        
+        var (exitCode, output) = RunAzCommand(
+            "network", "nsg", "rule", "update",
+            "--resource-group", config.ResourceGroup,
+            "--nsg-name", config.NsgName,
+            "--name", SshRuleName,
+            "--access", "Deny"
+        );
+        
+        if (exitCode == 0)
+        {
+            AnsiConsole.MarkupLine("[green]✓[/] SSH access closed (rule set to Deny)");
+        }
+        else
+        {
+            AnsiConsole.MarkupLine($"[red]Error:[/] Failed to update NSG rule.");
+            if (!string.IsNullOrWhiteSpace(output))
+                AnsiConsole.WriteLine(output);
+        }
+        
+        return exitCode;
+    }
+    
+    /// <summary>
+    /// Shows the current SSH access status.
+    /// </summary>
+    public static int Status(AppConfig config)
+    {
+        if (!ValidateAzureConfig(config))
+            return 1;
+        
+        if (!ValidateAzureCli())
+            return 1;
+        
+        var (exitCode, output) = RunAzCommand(
+            "network", "nsg", "rule", "show",
+            "--resource-group", config.ResourceGroup,
+            "--nsg-name", config.NsgName,
+            "--name", SshRuleName,
+            "--query", "{access:access, sourceAddressPrefixes:sourceAddressPrefixes, sourceAddressPrefix:sourceAddressPrefix}",
+            "--output", "json"
+        );
+        
+        if (exitCode != 0)
+        {
+            AnsiConsole.MarkupLine($"[red]Error:[/] Failed to get NSG rule status.");
+            if (!string.IsNullOrWhiteSpace(output))
+                AnsiConsole.WriteLine(output);
+            return exitCode;
+        }
+        
+        // Parse the JSON output
+        try
+        {
+            var json = System.Text.Json.JsonDocument.Parse(output);
+            var root = json.RootElement;
+            
+            var access = root.GetProperty("access").GetString() ?? "Unknown";
+            var isAllowed = access.Equals("Allow", StringComparison.OrdinalIgnoreCase);
+            
+            var table = new Table()
+                .Border(TableBorder.Rounded)
+                .AddColumn("Property")
+                .AddColumn("Value");
+            
+            table.AddRow("Resource Group", $"[blue]{config.ResourceGroup}[/]");
+            table.AddRow("NSG Name", $"[blue]{config.NsgName}[/]");
+            table.AddRow("Rule Name", SshRuleName);
+            table.AddRow("Access", isAllowed ? "[green]Allow[/]" : "[red]Deny[/]");
+            
+            // Get source addresses
+            var sources = new List<string>();
+            if (root.TryGetProperty("sourceAddressPrefixes", out var prefixes) && prefixes.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var prefix in prefixes.EnumerateArray())
+                {
+                    var val = prefix.GetString();
+                    if (!string.IsNullOrEmpty(val))
+                        sources.Add(val);
+                }
+            }
+            if (root.TryGetProperty("sourceAddressPrefix", out var singlePrefix) && singlePrefix.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                var val = singlePrefix.GetString();
+                if (!string.IsNullOrEmpty(val) && val != "*")
+                    sources.Add(val);
+                else if (val == "*")
+                    sources.Add("[yellow]* (any)[/]");
+            }
+            
+            if (sources.Count > 0)
+                table.AddRow("Allowed Sources", string.Join(", ", sources));
+            else if (isAllowed)
+                table.AddRow("Allowed Sources", "[yellow]* (any)[/]");
+            
+            AnsiConsole.Write(table);
+            
+            if (isAllowed)
+                AnsiConsole.MarkupLine("\n[green]SSH access is currently OPEN[/]");
+            else
+                AnsiConsole.MarkupLine("\n[red]SSH access is currently CLOSED[/]");
+        }
+        catch
+        {
+            // Fallback: just show raw output
+            AnsiConsole.WriteLine(output);
+        }
+        
+        return 0;
+    }
+    
+    /// <summary>
+    /// Prompts the user to configure Azure resource info.
+    /// </summary>
+    public static void Configure(AppConfig config)
+    {
+        AnsiConsole.Write(new Rule("[blue]Azure NSG Configuration[/]").RuleStyle("blue"));
+        AnsiConsole.MarkupLine("Configure Azure resource info to enable SSH access control.\n");
+        
+        var resourceGroup = AnsiConsole.Ask(
+            "Resource Group name:", 
+            string.IsNullOrWhiteSpace(config.ResourceGroup) ? "" : config.ResourceGroup);
+        config.ResourceGroup = resourceGroup;
+        
+        var nsgName = AnsiConsole.Ask(
+            "NSG name:", 
+            string.IsNullOrWhiteSpace(config.NsgName) ? "" : config.NsgName);
+        config.NsgName = nsgName;
+        
+        config.Save();
+        
+        AnsiConsole.MarkupLine($"\n[green]✓[/] Azure config saved");
+        AnsiConsole.MarkupLine($"  Resource Group: [yellow]{config.ResourceGroup}[/]");
+        AnsiConsole.MarkupLine($"  NSG Name: [yellow]{config.NsgName}[/]");
+    }
+    
+    private static bool ValidateAzureConfig(AppConfig config)
+    {
+        if (config.HasAzureConfig)
+            return true;
+        
+        AnsiConsole.MarkupLine("[red]Error:[/] Azure resource info not configured.");
+        AnsiConsole.MarkupLine("Run [yellow]ptx ssh config[/] to set up Azure resource info,");
+        AnsiConsole.MarkupLine("or run [yellow]ptx provision[/] to deploy a new Azure VM.");
+        return false;
+    }
+    
+    private static bool ValidateAzureCli()
+    {
+        var (exitCode, _) = RunAzCommand("version", "--output", "none");
+        if (exitCode == 0)
+            return true;
+        
+        AnsiConsole.MarkupLine("[red]Error:[/] Azure CLI (az) not found or not working.");
+        AnsiConsole.MarkupLine("Install it from: [blue]https://aka.ms/installazurecli[/]");
+        AnsiConsole.MarkupLine("Then run: [yellow]az login[/]");
+        return false;
+    }
+    
+    private static string? GetCurrentPublicIp()
+    {
+        // Try services that return IPv4 (Azure NSG doesn't support IPv6 in all configurations)
+        var ipv4Services = new[]
+        {
+            "https://api.ipify.org",        // Always IPv4
+            "https://ipv4.icanhazip.com",   // Explicitly IPv4
+            "https://checkip.amazonaws.com", // IPv4
+        };
+        
+        foreach (var service in ipv4Services)
+        {
+            try
+            {
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+                var response = client.GetStringAsync(service).GetAwaiter().GetResult();
+                var ip = response.Trim();
+                
+                // Verify it looks like IPv4 (contains dots, no colons)
+                if (ip.Contains('.') && !ip.Contains(':'))
+                    return ip;
+            }
+            catch
+            {
+                // Try next service
+            }
+        }
+        
+        return null;
+    }
+    
+    private static (int ExitCode, string Output) RunAzCommand(params string[] args)
+    {
+        var psi = new ProcessStartInfo
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        
+        if (OperatingSystem.IsWindows())
+        {
+            // On Windows, find az.cmd - it might be in various locations
+            var azPath = FindAzureCli();
+            if (azPath == null)
+                return (1, "Azure CLI not found");
+            
+            psi.FileName = azPath;
+        }
+        else
+        {
+            psi.FileName = "az";
+        }
+        
+        foreach (var arg in args)
+            psi.ArgumentList.Add(arg);
+        
+        try
+        {
+            using var process = Process.Start(psi);
+            if (process == null)
+                return (1, "Failed to start az command");
+            
+            var stdout = process.StandardOutput.ReadToEnd();
+            var stderr = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            
+            var output = string.IsNullOrWhiteSpace(stdout) ? stderr : stdout;
+            return (process.ExitCode, output);
+        }
+        catch (Exception ex)
+        {
+            return (1, ex.Message);
+        }
+    }
+    
+    private static string? FindAzureCli()
+    {
+        // Common Azure CLI installation paths on Windows
+        var possiblePaths = new[]
+        {
+            @"C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin\az.cmd",
+            @"C:\Program Files (x86)\Microsoft SDKs\Azure\CLI2\wbin\az.cmd",
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\Azure CLI\wbin\az.cmd"),
+        };
+        
+        foreach (var path in possiblePaths)
+        {
+            if (File.Exists(path))
+                return path;
+        }
+        
+        // Try to find via PATH using where.exe
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "where.exe",
+                Arguments = "az.cmd",
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var process = Process.Start(psi);
+            if (process != null)
+            {
+                var output = process.StandardOutput.ReadLine();
+                process.WaitForExit();
+                if (!string.IsNullOrWhiteSpace(output) && File.Exists(output))
+                    return output;
+            }
+        }
+        catch
+        {
+            // Ignore
+        }
+        
+        return null;
+    }
+}

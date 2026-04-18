@@ -19,6 +19,22 @@ return await Deployment.RunAsync(() =>
     var cloudflareZoneId = config.Get("cloudflareZoneId") ?? "";
     var cloudflareDnsChallenge = config.Get("cloudflareDnsChallenge") ?? "false";
     
+    // SSH access restriction (optional - defaults to any)
+    var sshAllowedCidrsJson = config.Get("sshAllowedCidrs");
+    string[]? sshAllowedCidrs = null;
+    if (!string.IsNullOrEmpty(sshAllowedCidrsJson))
+    {
+        try
+        {
+            sshAllowedCidrs = System.Text.Json.JsonSerializer.Deserialize<string[]>(sshAllowedCidrsJson);
+        }
+        catch
+        {
+            // If it's not valid JSON, treat it as a single CIDR
+            sshAllowedCidrs = [sshAllowedCidrsJson];
+        }
+    }
+    
     // Email configuration - ACS is the default
     var useAzureMail = config.GetBoolean("useAzureMail") ?? true;
     var acsUseCustomDomain = config.GetBoolean("acsUseCustomDomain") ?? false;
@@ -37,7 +53,7 @@ return await Deployment.RunAsync(() =>
     var rg = ResourceGroupStack.Create(prefix);
 
     // 2. Networking (VNet, Subnet, NSG, Public IP, NIC)
-    var network = NetworkStack.Create(prefix, rg);
+    var network = NetworkStack.Create(prefix, rg, sshAllowedCidrs);
 
     // 3. Auto-generated secrets (encrypted in Pulumi state)
     var secrets = SecretGenerator.Create(prefix);

@@ -134,6 +134,10 @@ public sealed class Remote
         if (interactive)
             sshArgs.Add("-t");
 
+        // Add connection timeout (30 seconds)
+        sshArgs.Add("-o");
+        sshArgs.Add("ConnectTimeout=30");
+
         if (!string.IsNullOrWhiteSpace(_config.KeyFile))
         {
             sshArgs.Add("-i");
@@ -300,7 +304,10 @@ public sealed class Remote
             authMethods.Add(new PasswordAuthenticationMethod(user, password));
         }
 
-        return new ConnectionInfo(hostname, 22, user, authMethods.ToArray());
+        return new ConnectionInfo(hostname, 22, user, authMethods.ToArray())
+        {
+            Timeout = TimeSpan.FromSeconds(30), // Connection timeout
+        };
     }
 
     private static PrivateKeyFile? TryLoadPrivateKey(string keyPath)

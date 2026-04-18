@@ -1,5 +1,7 @@
-FROM caddy:2-builder AS builder
+# Pin Caddy version for reproducible builds
+# Check for updates: https://hub.docker.com/_/caddy/tags
+FROM caddy:2.9-builder AS builder
 RUN xcaddy build --with github.com/caddy-dns/cloudflare
 
-FROM caddy:2-alpine
+FROM caddy:2.9-alpine
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy

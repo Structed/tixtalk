@@ -136,6 +136,7 @@ All configuration is managed via Pulumi config (`pulumi config set <key> <value>
 | `pre-talx-tix:sshPublicKey` | Yes | — | — | SSH public key for VM access |
 | `pre-talx-tix:prefix` | No | `pretalxtix` | — | Azure resource name prefix |
 | `pre-talx-tix:vmSize` | No | `Standard_B2s` | — | Azure VM SKU |
+| `pre-talx-tix:sshAllowedCidrs` | No | `["*"]` | — | JSON array of CIDR ranges allowed for SSH (see [Security](#security)) |
 | `azure-native:location` | No | `westeurope` | — | Azure region |
 | `pre-talx-tix:cloudflareApiToken` | No | — | `CLOUDFLARE_API_TOKEN` | Cloudflare API token (use `--secret`) |
 | `pre-talx-tix:cloudflareZoneId` | No | — | `CLOUDFLARE_ZONE_ID` | Cloudflare Zone ID |
@@ -150,6 +151,19 @@ All configuration is managed via Pulumi config (`pulumi config set <key> <value>
 | `pre-talx-tix:pretixImageTag` | No | `stable` | `PRETIX_IMAGE_TAG` | Pretix Docker image tag |
 | `pre-talx-tix:pretalxImageTag` | No | `latest` | `PRETALX_IMAGE_TAG` | Pretalx Docker image tag |
 | `pre-talx-tix:repoUrl` | No | *(this repo)* | — | Git repo to clone on VM |
+
+## Security
+
+For production deployments, see [SECURITY.md](SECURITY.md) for detailed security guidance.
+
+### Restricting SSH Access
+
+By default, SSH is open to any IP. Restrict it with:
+
+```bash
+pulumi config set pre-talx-tix:sshAllowedCidrs '["203.0.113.0/24", "198.51.100.42/32"]'
+pulumi up
+```
 
 ## Management CLI
 
@@ -173,6 +187,11 @@ ptx update               # Pull latest images + restart
 ptx logs pretix          # Tail pretix logs
 ptx backup               # Backup databases
 ptx help                 # All commands
+
+# Control SSH access (Azure deployments only)
+ptx ssh open             # Open SSH from your current IP
+ptx ssh close            # Block all SSH access
+ptx ssh status           # Show SSH access state
 ```
 
 #### Install the CLI

@@ -67,14 +67,14 @@ public static class CloudInitBuilder
         string smtpPassword,
         string mailFrom)
     {
-        // Build .env content and base64-encode it
+        // Build .env content and base64-encode it (ensure Unix line endings)
         var envContent = BuildEnvContent(cfg, dbUser, dbPassword, pretixSecret, pretalxSecret,
             smtpHost, smtpUser, smtpPassword, mailFrom);
-        var envBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(envContent));
+        var envBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(envContent.Replace("\r\n", "\n")));
 
-        // Build setup script and base64-encode it
+        // Build setup script and base64-encode it (ensure Unix line endings)
         var setupScript = BuildSetupScript(cfg, dbUser, adminPassword);
-        var scriptBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(setupScript));
+        var scriptBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(setupScript.Replace("\r\n", "\n")));
 
         // Build minimal cloud-init YAML — no block scalars, no heredocs
         var sb = new StringBuilder();
@@ -141,6 +141,45 @@ public static class CloudInitBuilder
         sb.Append("exec > >(tee -a /var/log/pretalxtix-setup.log) 2>&1\n");
         sb.Append("echo '=== PreTalxTix setup started ==='\n");
         sb.Append("\n");
+        
+        // Define helper functions at the top for reuse
+        sb.Append(@"# Helper function: wait for a condition with retries
+# Usage: wait_for <name> <check_command> [max_attempts] [sleep_seconds]
+wait_for() {
+    local name=""$1"" cmd=""$2"" max=""${3:-30}"" sleep_secs=""${4:-5}""
+    echo ""Waiting for $name...""
+    for i in $(seq 1 ""$max""); do
+        if eval ""$cmd"" >/dev/null 2>&1; then
+            echo ""$name is ready.""
+            return 0
+        fi
+        if [ ""$i"" -eq ""$max"" ]; then
+            echo ""ERROR: $name timeout after $((max * sleep_secs)) seconds""
+            return 1
+        fi
+        echo ""  Waiting for $name... ($i/$max)""
+        sleep ""$sleep_secs""
+    done
+}
+
+# Helper function: retry a command
+# Usage: retry <name> <command> [max_attempts] [sleep_seconds]
+retry() {
+    local name=""$1"" cmd=""$2"" max=""${3:-3}"" sleep_secs=""${4:-10}""
+    for attempt in $(seq 1 ""$max""); do
+        if eval ""$cmd""; then
+            return 0
+        fi
+        if [ ""$attempt"" -eq ""$max"" ]; then
+            echo ""ERROR: $name failed after $max attempts""
+            return 1
+        fi
+        echo ""$name failed, retrying in ${sleep_secs}s... (attempt $attempt/$max)""
+        sleep ""$sleep_secs""
+    done
+}
+
+");
 
         // Install Docker
         sb.Append("echo 'Installing Docker...'\n");
@@ -153,17 +192,8 @@ public static class CloudInitBuilder
         sb.Append("usermod -aG docker azureuser\n");
         sb.Append("\n");
 
-        // Verify Docker is ready
-        sb.Append("echo 'Verifying Docker is ready...'\n");
-        sb.Append("for i in $(seq 1 30); do\n");
-        sb.Append("  if docker info >/dev/null 2>&1; then\n");
-        sb.Append("    echo 'Docker is ready.'\n");
-        sb.Append("    break\n");
-        sb.Append("  fi\n");
-        sb.Append("  if [ \"$i\" -eq 30 ]; then echo 'ERROR: Docker not ready'; exit 1; fi\n");
-        sb.Append("  echo \"Waiting for Docker... ($i/30)\"\n");
-        sb.Append("  sleep 2\n");
-        sb.Append("done\n");
+        // Verify Docker is ready (using helper)
+        sb.Append("wait_for 'Docker' 'docker info' 30 2 || exit 1\n");
         sb.Append("\n");
 
         // Configure firewall
@@ -180,18 +210,10 @@ public static class CloudInitBuilder
         sb.Append("DEBIAN_FRONTEND=noninteractive dpkg-reconfigure -plow unattended-upgrades\n");
         sb.Append("\n");
 
-        // Clone the repo (with retry for transient network issues)
+        // Clone the repo (using retry helper)
         sb.Append("echo 'Cloning repository...'\n");
         var branchArg = string.IsNullOrEmpty(cfg.RepoBranch) ? "" : $" -b {cfg.RepoBranch}";
-        sb.Append("for attempt in 1 2 3; do\n");
-        sb.Append($"  if git clone{branchArg} {cfg.RepoUrl} /opt/pretalxtix; then\n");
-        sb.Append("    echo 'Repository cloned successfully.'\n");
-        sb.Append("    break\n");
-        sb.Append("  fi\n");
-        sb.Append("  if [ \"$attempt\" -eq 3 ]; then echo 'ERROR: Git clone failed after 3 attempts'; exit 1; fi\n");
-        sb.Append("  echo \"Git clone failed, retrying in 10s... (attempt $attempt/3)\"\n");
-        sb.Append("  sleep 10\n");
-        sb.Append("done\n");
+        sb.Append($"retry 'Git clone' 'git clone{branchArg} {cfg.RepoUrl} /opt/pretalxtix' 3 10 || exit 1\n");
         sb.Append("\n");
 
         // Move .env file into place
@@ -220,66 +242,48 @@ public static class CloudInitBuilder
         }
         sb.Append("\n");
 
-        // Wait for PostgreSQL
-        sb.Append("echo 'Waiting for PostgreSQL...'\n");
-        sb.Append("for i in $(seq 1 90); do\n");
-        sb.Append($"  if docker compose exec -T postgres pg_isready -U {dbUser} >/dev/null 2>&1; then\n");
-        sb.Append("    echo 'PostgreSQL is ready.'\n");
-        sb.Append("    break\n");
-        sb.Append("  fi\n");
-        sb.Append("  if [ \"$i\" -eq 90 ]; then echo 'ERROR: PostgreSQL timeout'; exit 1; fi\n");
-        sb.Append("  echo \"Waiting for PostgreSQL... ($i/90)\"\n");
-        sb.Append("  sleep 5\n");
-        sb.Append("done\n");
+        // Wait for PostgreSQL (using helper function)
+        sb.Append($"wait_for 'PostgreSQL' 'docker compose exec -T postgres pg_isready -U {dbUser}' 90 5 || exit 1\n");
         sb.Append("\n");
 
-        // Wait for init-db.sh to create databases (healthcheck passes before init scripts complete)
-        sb.Append("echo 'Waiting for databases to be created...'\n");
-        sb.Append("for i in $(seq 1 60); do\n");
-        sb.Append($"  PRETIX_EXISTS=$(docker compose exec -T postgres psql -U {dbUser} -tAc \"SELECT 1 FROM pg_database WHERE datname='pretix'\" 2>/dev/null || true)\n");
-        sb.Append($"  PRETALX_EXISTS=$(docker compose exec -T postgres psql -U {dbUser} -tAc \"SELECT 1 FROM pg_database WHERE datname='pretalx'\" 2>/dev/null || true)\n");
-        sb.Append("  if [ \"$PRETIX_EXISTS\" = \"1\" ] && [ \"$PRETALX_EXISTS\" = \"1\" ]; then\n");
-        sb.Append("    echo 'Databases pretix and pretalx are ready.'\n");
-        sb.Append("    break\n");
-        sb.Append("  fi\n");
-        sb.Append("  if [ \"$i\" -eq 60 ]; then echo 'ERROR: Database creation timeout'; exit 1; fi\n");
-        sb.Append("  echo \"Waiting for databases... ($i/60)\"\n");
-        sb.Append("  sleep 5\n");
-        sb.Append("done\n");
+        // Wait for databases to be created (custom check - init-db.sh may run after healthcheck passes)
+        sb.Append($@"echo 'Waiting for databases to be created...'
+wait_for 'pretix database' ""docker compose exec -T postgres psql -U {dbUser} -tAc \""SELECT 1 FROM pg_database WHERE datname='pretix'\"" | grep -q 1"" 60 5 || exit 1
+wait_for 'pretalx database' ""docker compose exec -T postgres psql -U {dbUser} -tAc \""SELECT 1 FROM pg_database WHERE datname='pretalx'\"" | grep -q 1"" 60 5 || exit 1
+");
         sb.Append("\n");
 
-        // Wait for containers to finish their internal migrations and become healthy
-        // The pretix/pretalx standalone images run migrations automatically on startup
-        // Use container running status as fallback if check command fails
-        sb.Append("echo 'Waiting for pretix to be ready...'\n");
-        sb.Append("for i in $(seq 1 60); do\n");
-        sb.Append("  # Try pretix check command first, fall back to checking if container is running\n");
-        sb.Append("  if docker compose exec -T pretix pretix check >/dev/null 2>&1; then\n");
-        sb.Append("    echo 'Pretix is ready (check passed).'\n");
-        sb.Append("    break\n");
-        sb.Append("  elif [ \"$i\" -gt 30 ] && docker compose ps pretix --format '{{.State}}' 2>/dev/null | grep -q 'running'; then\n");
-        sb.Append("    echo 'Pretix container is running (check command unavailable).'\n");
-        sb.Append("    break\n");
-        sb.Append("  fi\n");
-        sb.Append("  if [ \"$i\" -eq 60 ]; then echo 'WARNING: Pretix readiness timeout, continuing...'; fi\n");
-        sb.Append("  echo \"Waiting for pretix... ($i/60)\"\n");
-        sb.Append("  sleep 10\n");
-        sb.Append("done\n");
-        sb.Append("\n");
-        sb.Append("echo 'Waiting for pretalx to be ready...'\n");
-        sb.Append("for i in $(seq 1 60); do\n");
-        sb.Append("  # Try pretalx check command first, fall back to checking if container is running\n");
-        sb.Append("  if docker compose exec -T pretalx pretalx check >/dev/null 2>&1; then\n");
-        sb.Append("    echo 'Pretalx is ready (check passed).'\n");
-        sb.Append("    break\n");
-        sb.Append("  elif [ \"$i\" -gt 30 ] && docker compose ps pretalx --format '{{.State}}' 2>/dev/null | grep -q 'running'; then\n");
-        sb.Append("    echo 'Pretalx container is running (check command unavailable).'\n");
-        sb.Append("    break\n");
-        sb.Append("  fi\n");
-        sb.Append("  if [ \"$i\" -eq 60 ]; then echo 'WARNING: Pretalx readiness timeout, continuing...'; fi\n");
-        sb.Append("  echo \"Waiting for pretalx... ($i/60)\"\n");
-        sb.Append("  sleep 10\n");
-        sb.Append("done\n");
+        // Wait for app containers (with fallback to container running state)
+        sb.Append(@"# Wait for pretix with fallback to running state
+echo 'Waiting for pretix to be ready...'
+for i in $(seq 1 60); do
+    if docker compose exec -T pretix pretix check >/dev/null 2>&1; then
+        echo 'Pretix is ready (check passed).'
+        break
+    elif [ ""$i"" -gt 30 ] && docker compose ps pretix --format '{{.State}}' 2>/dev/null | grep -q 'running'; then
+        echo 'Pretix container is running (check command unavailable).'
+        break
+    fi
+    [ ""$i"" -eq 60 ] && echo 'WARNING: Pretix readiness timeout, continuing...'
+    echo ""  Waiting for pretix... ($i/60)""
+    sleep 10
+done
+
+# Wait for pretalx with fallback to running state
+echo 'Waiting for pretalx to be ready...'
+for i in $(seq 1 60); do
+    if docker compose exec -T pretalx pretalx check >/dev/null 2>&1; then
+        echo 'Pretalx is ready (check passed).'
+        break
+    elif [ ""$i"" -gt 30 ] && docker compose ps pretalx --format '{{.State}}' 2>/dev/null | grep -q 'running'; then
+        echo 'Pretalx container is running (check command unavailable).'
+        break
+    fi
+    [ ""$i"" -eq 60 ] && echo 'WARNING: Pretalx readiness timeout, continuing...'
+    echo ""  Waiting for pretalx... ($i/60)""
+    sleep 10
+done
+");
         sb.Append("\n");
 
         // Note: pretix/pretalx standalone containers handle migrations and static files automatically on startup.

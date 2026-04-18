@@ -4,15 +4,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+source "$SCRIPT_DIR/lib/common.sh"
+
+init_project_dir
 cd "$PROJECT_DIR"
 
 # Load .env for configuration
-if [ -f .env ]; then
-    set -a
-    source .env
-    set +a
-fi
+load_env || true
 
 # Parse optional tag overrides
 while [[ $# -gt 0 ]]; do
@@ -35,10 +33,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "Pulling latest images..."
-COMPOSE_CMD="docker compose"
-if [ "${CLOUDFLARE_DNS_CHALLENGE:-false}" = "true" ]; then
-    COMPOSE_CMD="docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml"
-fi
+COMPOSE_CMD=$(compose_cmd)
 $COMPOSE_CMD pull --ignore-buildable 2>/dev/null || $COMPOSE_CMD pull 2>/dev/null || true
 
 echo "Restarting services..."

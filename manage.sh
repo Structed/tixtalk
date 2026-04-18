@@ -12,24 +12,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPTS="$SCRIPT_DIR/scripts"
 
-# Load .env if available (for DOMAIN, CLOUDFLARE_DNS_CHALLENGE, etc.)
-load_env() {
-    if [ -f "$SCRIPT_DIR/.env" ]; then
-        set -a
-        source "$SCRIPT_DIR/.env"
-        set +a
-    fi
-}
-
-# Compose command respecting Cloudflare DNS challenge mode
-compose_cmd() {
-    load_env
-    if [ "${CLOUDFLARE_DNS_CHALLENGE:-false}" = "true" ]; then
-        echo "docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml"
-    else
-        echo "docker compose"
-    fi
-}
+# Source common library
+source "$SCRIPT_DIR/scripts/lib/common.sh" 2>/dev/null || true
+PROJECT_DIR="$SCRIPT_DIR"
 
 # ---- Commands ----------------------------------------------------------------
 

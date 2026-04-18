@@ -51,7 +51,8 @@ public static class Menu
             new SelectionPrompt<string>()
                 .Title("[bold]What would you like to do?[/]")
                 .HighlightStyle("green")
-                .AddChoices(
+                .AddChoiceGroup("Operations", new[]
+                {
                     "Status",
                     "Update containers",
                     "View logs",
@@ -62,13 +63,25 @@ public static class Menu
                     "Update DNS records",
                     "Stop services",
                     "Start services",
-                    "─── First-time setup ───",
+                })
+                .AddChoiceGroup("Azure SSH Access", new[]
+                {
+                    "Open SSH access",
+                    "Close SSH access",
+                    "SSH access status",
+                })
+                .AddChoiceGroup("First-time setup", new[]
+                {
                     "Provision new server (Azure)",
                     "Server setup (install Docker)",
                     "Deploy (first time)",
-                    "─── Configuration ───",
+                })
+                .AddChoiceGroup("Configuration", new[]
+                {
                     "Change connection",
-                    "Quit"));
+                    "Configure Azure NSG",
+                    "Quit",
+                }));
 
         AnsiConsole.WriteLine();
 
@@ -84,10 +97,14 @@ public static class Menu
             "Update DNS records" => remote.RunCommand("dns"),
             "Stop services" => remote.RunCommand("stop"),
             "Start services" => remote.RunCommand("start"),
+            "Open SSH access" => SshAccess.Open(config),
+            "Close SSH access" => SshAccess.Close(config),
+            "SSH access status" => SshAccess.Status(config),
             "Provision new server (Azure)" => Provision.Run(),
             "Server setup (install Docker)" => remote.RunCommand("setup"),
             "Deploy (first time)" => remote.RunCommand("deploy"),
             "Change connection" => ChangeConnection(config),
+            "Configure Azure NSG" => ConfigureAzureNsg(config),
             "Quit" => 0,
             _ => 0,
         };
@@ -143,6 +160,12 @@ public static class Menu
     private static int ChangeConnection(AppConfig config)
     {
         config.RunConnect(null);
+        return 0;
+    }
+    
+    private static int ConfigureAzureNsg(AppConfig config)
+    {
+        SshAccess.Configure(config);
         return 0;
     }
 

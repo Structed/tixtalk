@@ -15,7 +15,7 @@ config:
   pre-talx-tix:smtpPassword:
     secure: AAABAOZkxeOJVSFA448OXkqbjW6P84XsrFoZUzM3n0vi8zkcfzc/FfothksEF+5P4mHR1ktLLrPNe3jmdpWrUds5xzq6sZNQ
   pre-talx-tix:cloudflareApiToken:
-    secure: AAABAEh0QbBASGa5DoPEMMigyPI5QfIL9Gvh9oQopsgn3MV0C9J7A6cY+eRdNyAfwW1ly85Yo67fcE6QF+fnKvu29wHnvfxLJcFO9B2RmMwb0bG7ag==
+    secure: AAABAALcFhUMEkpH+UqPMU6j5jEpBRgEXl+++/Em7nwJ+JRh86OclGDVIJyGwvS5PIioOtRa1oPJsgX1569Tnf1kLd3dVUZtiqmdC0QhgqJrcECtOA==
   pre-talx-tix:cloudflareZoneId: 3191caf42094e04b63439d70094f4b26
   pre-talx-tix:cloudflareDnsChallenge: "true"
   pre-talx-tix:adminEmail: johannes@godotfest.com

@@ -5,7 +5,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+source "$SCRIPT_DIR/lib/common.sh"
+
+init_project_dir
 cd "$PROJECT_DIR"
 
 if [ $# -lt 2 ]; then
@@ -31,9 +33,7 @@ if [ "$DATABASE" != "pretix" ] && [ "$DATABASE" != "pretalx" ]; then
 fi
 
 # Load .env for DB credentials
-set -a
-source .env
-set +a
+load_env
 
 echo "WARNING: This will overwrite the '$DATABASE' database with the backup."
 read -p "Are you sure? (y/N) " -n 1 -r

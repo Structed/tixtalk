@@ -16,6 +16,7 @@ return command switch
 {
     "provision" => Provision.Run(),
     "connect" => Connect(commandArgs),
+    "ssh" => SshCommand(commandArgs),
     "status" => remote.RunCommand("status"),
     "deploy" => remote.RunCommand("deploy"),
     "setup" => remote.RunCommand("setup"),
@@ -38,6 +39,43 @@ int Connect(string[] cArgs)
     return 0;
 }
 
+int SshCommand(string[] sshArgs)
+{
+    if (sshArgs.Length == 0)
+    {
+        AnsiConsole.MarkupLine("[red]Error:[/] Missing subcommand. Usage:");
+        AnsiConsole.MarkupLine("  [yellow]ptx ssh open[/]        - Open SSH from your current IP");
+        AnsiConsole.MarkupLine("  [yellow]ptx ssh open <cidr>[/] - Open SSH from specified CIDR");
+        AnsiConsole.MarkupLine("  [yellow]ptx ssh close[/]       - Close SSH access");
+        AnsiConsole.MarkupLine("  [yellow]ptx ssh status[/]      - Show current SSH access status");
+        AnsiConsole.MarkupLine("  [yellow]ptx ssh config[/]      - Configure Azure resource info");
+        return 1;
+    }
+    
+    var subCommand = sshArgs[0].ToLowerInvariant();
+    return subCommand switch
+    {
+        "open" => SshAccess.Open(config, sshArgs.Length > 1 ? sshArgs[1] : null),
+        "close" => SshAccess.Close(config),
+        "status" => SshAccess.Status(config),
+        "config" => ConfigureSsh(),
+        _ => UnknownSshCommand(subCommand)
+    };
+    
+    int ConfigureSsh()
+    {
+        SshAccess.Configure(config);
+        return 0;
+    }
+    
+    int UnknownSshCommand(string cmd)
+    {
+        AnsiConsole.MarkupLine($"[red]Unknown ssh subcommand:[/] {Markup.Escape(cmd)}");
+        AnsiConsole.MarkupLine("Valid subcommands: [yellow]open[/], [yellow]close[/], [yellow]status[/], [yellow]config[/]");
+        return 1;
+    }
+}
+
 int ShowHelp()
 {
     AnsiConsole.Write(new Rule("[blue]Pretix + Pretalx CLI[/]").RuleStyle("blue"));
@@ -52,6 +90,7 @@ int ShowHelp()
 
     table.AddRow("[green]provision[/]", "Provision a new Azure VM (interactive wizard)");
     table.AddRow("[green]connect[/] <user@host>", "Configure SSH connection to the server");
+    table.AddRow("[green]ssh[/] <open|close|status|config>", "Control Azure NSG SSH access");
     table.AddRow("[green]status[/]", "Show service status, URLs, and disk usage");
     table.AddRow("[green]deploy[/]", "First-time deployment (generates secrets, starts services)");
     table.AddRow("[green]setup[/]", "Install Docker & configure firewall on the server");
