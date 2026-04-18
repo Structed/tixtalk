@@ -294,18 +294,52 @@ done
         {
             sb.Append("echo 'Creating admin superuser accounts...'\n");
             sb.Append("\n");
-            
-            // Create Pretix superuser
+
+            // Define creation functions to avoid eval quoting issues with retry()
+            sb.Append($@"create_pretix_admin() {{
+    docker compose exec -T \
+        -e DJANGO_SUPERUSER_EMAIL='{cfg.AdminEmail}' \
+        -e DJANGO_SUPERUSER_PASSWORD='{adminPassword}' \
+        pretix pretix createsuperuser --noinput --email '{cfg.AdminEmail}'
+}}
+
+create_pretalx_admin() {{
+    docker compose exec -T \
+        -e DJANGO_SUPERUSER_EMAIL='{cfg.AdminEmail}' \
+        -e DJANGO_SUPERUSER_PASSWORD='{adminPassword}' \
+        -e PRETALX_INIT_ORGANISER_NAME='{cfg.OrganiserName}' \
+        -e PRETALX_INIT_ORGANISER_SLUG='{cfg.OrganiserSlug}' \
+        pretalx pretalx init --noinput
+}}
+
+");
+            // Create Pretix superuser (with retry — migrations may still be running)
             sb.Append("echo 'Creating Pretix admin user...'\n");
-            sb.Append($"docker compose exec -T -e DJANGO_SUPERUSER_EMAIL='{cfg.AdminEmail}' -e DJANGO_SUPERUSER_PASSWORD='{adminPassword}' pretix pretix createsuperuser --noinput || echo 'WARNING: Pretix superuser creation failed (may already exist)'\n");
+            sb.Append("retry 'Pretix superuser' create_pretix_admin 3 15 || true\n");
             sb.Append("\n");
             
-            // Create Pretalx superuser via init command
+            // Create Pretalx superuser via init command (with retry)
             sb.Append("echo 'Creating Pretalx admin user and organiser...'\n");
-            sb.Append($"docker compose exec -T -e DJANGO_SUPERUSER_EMAIL='{cfg.AdminEmail}' -e DJANGO_SUPERUSER_PASSWORD='{adminPassword}' -e PRETALX_INIT_ORGANISER_NAME='{cfg.OrganiserName}' -e PRETALX_INIT_ORGANISER_SLUG='{cfg.OrganiserSlug}' pretalx pretalx init --noinput || echo 'WARNING: Pretalx init failed (may already be initialized)'\n");
+            sb.Append("retry 'Pretalx init' create_pretalx_admin 3 15 || true\n");
             sb.Append("\n");
-            
-            sb.Append("echo 'Admin accounts created successfully.'\n");
+
+            // Verify accounts were created by querying the database
+            sb.Append("echo 'Verifying admin accounts...'\n");
+            sb.Append($"PRETIX_ADMIN=$(docker compose exec -T postgres psql -U {dbUser} -d pretix -tAc \"SELECT email FROM pretixbase_user WHERE email='{cfg.AdminEmail}' AND is_active=true LIMIT 1\" 2>/dev/null || true)\n");
+            sb.Append($"PRETALX_ADMIN=$(docker compose exec -T postgres psql -U {dbUser} -d pretalx -tAc \"SELECT email FROM person_user WHERE email='{cfg.AdminEmail}' AND is_active=true LIMIT 1\" 2>/dev/null || true)\n");
+            sb.Append("\n");
+            sb.Append($"if [ \"$PRETIX_ADMIN\" = \"{cfg.AdminEmail}\" ]; then\n");
+            sb.Append("  echo 'Pretix admin account verified.'\n");
+            sb.Append("else\n");
+            sb.Append("  echo 'ERROR: Pretix admin account was NOT created!'\n");
+            sb.Append($"  echo 'Create manually: docker compose exec -T pretix pretix createsuperuser --email {cfg.AdminEmail}'\n");
+            sb.Append("fi\n");
+            sb.Append($"if [ \"$PRETALX_ADMIN\" = \"{cfg.AdminEmail}\" ]; then\n");
+            sb.Append("  echo 'Pretalx admin account verified.'\n");
+            sb.Append("else\n");
+            sb.Append("  echo 'ERROR: Pretalx admin account was NOT created!'\n");
+            sb.Append("  echo 'Create manually: docker compose exec -T pretalx pretalx init'\n");
+            sb.Append("fi\n");
             sb.Append("\n");
         }
 
