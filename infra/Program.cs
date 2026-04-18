@@ -162,6 +162,7 @@ return await Deployment.RunAsync(() =>
         outputs["emailProvider"] = "Azure Communication Services";
         outputs["smtpHost"] = acsResult.SmtpHost;
         outputs["mailFrom"] = acsResult.MailFrom;
+        outputs["acsConnectionString"] = Output.CreateSecret(acsResult.ConnectionString);
     }
 
     return outputs;

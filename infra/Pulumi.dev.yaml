@@ -4,7 +4,7 @@ config:
   tixtalk:vmSize: Standard_B2s
   tixtalk:pretixImageTag: stable
   tixtalk:pretalxImageTag: latest
-  tixtalk:mailFrom: DoNotReply@godotfest.com
+  tixtalk:mailFrom: noreply@godotfest.com
   # Required — set before running `pulumi up`:
 
   tixtalk:domain: godotfest.com
@@ -20,26 +20,4 @@ config:
   tixtalk:cloudflareDnsChallenge: "true"
   tixtalk:adminEmail: johannes@godotfest.com
   tixtalk:useAzureMail: "true"
-  tixtalk:acsUseCustomDomain: "false"
-
-# tixtalk:domain: yourdomain.com
-
-# tixtalk:sshPublicKey: ssh-rsa AAAA...
-
-# Optional — Cloudflare DNS automation:
-
-# tixtalk:cloudflareApiToken: <secret>
-
-# tixtalk:cloudflareZoneId: <zone-id>
-
-# tixtalk:cloudflareDnsChallenge: "false"
-
-# Optional — SMTP:
-
-# tixtalk:smtpHost: smtp.example.com
-
-# tixtalk:smtpPort: "587"
-
-# tixtalk:smtpUser: user
-
-# tixtalk:smtpPassword: <secret>
+  tixtalk:acsUseCustomDomain: "true"
