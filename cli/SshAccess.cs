@@ -237,38 +237,58 @@ public static class SshAccess
     
     private static string? GetCurrentPublicIp()
     {
-        try
+        // Try services that return IPv4 (Azure NSG doesn't support IPv6 in all configurations)
+        var ipv4Services = new[]
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            var response = client.GetStringAsync("https://ifconfig.me/ip").GetAwaiter().GetResult();
-            return response.Trim();
-        }
-        catch
+            "https://api.ipify.org",        // Always IPv4
+            "https://ipv4.icanhazip.com",   // Explicitly IPv4
+            "https://checkip.amazonaws.com", // IPv4
+        };
+        
+        foreach (var service in ipv4Services)
         {
-            // Try alternative service
             try
             {
                 using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-                var response = client.GetStringAsync("https://api.ipify.org").GetAwaiter().GetResult();
-                return response.Trim();
+                var response = client.GetStringAsync(service).GetAwaiter().GetResult();
+                var ip = response.Trim();
+                
+                // Verify it looks like IPv4 (contains dots, no colons)
+                if (ip.Contains('.') && !ip.Contains(':'))
+                    return ip;
             }
             catch
             {
-                return null;
+                // Try next service
             }
         }
+        
+        return null;
     }
     
     private static (int ExitCode, string Output) RunAzCommand(params string[] args)
     {
         var psi = new ProcessStartInfo
         {
-            FileName = "az",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        
+        if (OperatingSystem.IsWindows())
+        {
+            // On Windows, find az.cmd - it might be in various locations
+            var azPath = FindAzureCli();
+            if (azPath == null)
+                return (1, "Azure CLI not found");
+            
+            psi.FileName = azPath;
+        }
+        else
+        {
+            psi.FileName = "az";
+        }
         
         foreach (var arg in args)
             psi.ArgumentList.Add(arg);
@@ -290,5 +310,49 @@ public static class SshAccess
         {
             return (1, ex.Message);
         }
+    }
+    
+    private static string? FindAzureCli()
+    {
+        // Common Azure CLI installation paths on Windows
+        var possiblePaths = new[]
+        {
+            @"C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin\az.cmd",
+            @"C:\Program Files (x86)\Microsoft SDKs\Azure\CLI2\wbin\az.cmd",
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\Azure CLI\wbin\az.cmd"),
+        };
+        
+        foreach (var path in possiblePaths)
+        {
+            if (File.Exists(path))
+                return path;
+        }
+        
+        // Try to find via PATH using where.exe
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "where.exe",
+                Arguments = "az.cmd",
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var process = Process.Start(psi);
+            if (process != null)
+            {
+                var output = process.StandardOutput.ReadLine();
+                process.WaitForExit();
+                if (!string.IsNullOrWhiteSpace(output) && File.Exists(output))
+                    return output;
+            }
+        }
+        catch
+        {
+            // Ignore
+        }
+        
+        return null;
     }
 }
