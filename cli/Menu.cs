@@ -64,6 +64,12 @@ public static class Menu
                     "Stop services",
                     "Start services",
                 })
+                .AddChoiceGroup("Azure SSH Access", new[]
+                {
+                    "Open SSH access",
+                    "Close SSH access",
+                    "SSH access status",
+                })
                 .AddChoiceGroup("First-time setup", new[]
                 {
                     "Provision new server (Azure)",
@@ -73,6 +79,7 @@ public static class Menu
                 .AddChoiceGroup("Configuration", new[]
                 {
                     "Change connection",
+                    "Configure Azure NSG",
                     "Quit",
                 }));
 
@@ -90,10 +97,14 @@ public static class Menu
             "Update DNS records" => remote.RunCommand("dns"),
             "Stop services" => remote.RunCommand("stop"),
             "Start services" => remote.RunCommand("start"),
+            "Open SSH access" => SshAccess.Open(config),
+            "Close SSH access" => SshAccess.Close(config),
+            "SSH access status" => SshAccess.Status(config),
             "Provision new server (Azure)" => Provision.Run(),
             "Server setup (install Docker)" => remote.RunCommand("setup"),
             "Deploy (first time)" => remote.RunCommand("deploy"),
             "Change connection" => ChangeConnection(config),
+            "Configure Azure NSG" => ConfigureAzureNsg(config),
             "Quit" => 0,
             _ => 0,
         };
@@ -149,6 +160,12 @@ public static class Menu
     private static int ChangeConnection(AppConfig config)
     {
         config.RunConnect(null);
+        return 0;
+    }
+    
+    private static int ConfigureAzureNsg(AppConfig config)
+    {
+        SshAccess.Configure(config);
         return 0;
     }
 

@@ -13,6 +13,10 @@ public sealed class AppConfig
     public string Host { get; set; } = "";
     public string KeyFile { get; set; } = "";
     public string ProjectDir { get; set; } = "~/pre-talx-tix-azure";
+    
+    // Azure resource info (for SSH access control)
+    public string ResourceGroup { get; set; } = "";
+    public string NsgName { get; set; } = "";
 
     private static readonly string ConfigDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -37,6 +41,8 @@ public sealed class AppConfig
     }
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Host);
+    
+    public bool HasAzureConfig => !string.IsNullOrWhiteSpace(ResourceGroup) && !string.IsNullOrWhiteSpace(NsgName);
 
     public (string User, string Hostname) ParseHost()
     {

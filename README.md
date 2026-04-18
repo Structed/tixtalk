@@ -187,6 +187,11 @@ ptx update               # Pull latest images + restart
 ptx logs pretix          # Tail pretix logs
 ptx backup               # Backup databases
 ptx help                 # All commands
+
+# Control SSH access (Azure deployments only)
+ptx ssh open             # Open SSH from your current IP
+ptx ssh close            # Block all SSH access
+ptx ssh status           # Show SSH access state
 ```
 
 #### Install the CLI

@@ -102,6 +102,33 @@ pulumi stack output
 
 ## SSH Access
 
+### On-Demand SSH Access (Azure Deployments)
+
+For Azure deployments, you can dynamically control SSH access using the `ptx` CLI. This lets you keep SSH closed by default and only open it when needed.
+
+```bash
+# Open SSH access from your current public IP
+ptx ssh open
+
+# Open SSH from a specific IP/CIDR
+ptx ssh open 203.0.113.42/32
+
+# Check current SSH access status
+ptx ssh status
+
+# Close SSH access (sets NSG rule to deny)
+ptx ssh close
+```
+
+**Menu option:** The interactive menu (`ptx`) also has "Open SSH access", "Close SSH access", and "SSH access status" options under "Azure SSH Access".
+
+**Setup:** If you used `ptx provision`, Azure resource info is automatically saved. For existing deployments, configure manually:
+
+```bash
+ptx ssh config
+# Enter: Resource Group name and NSG name
+```
+
 ### Key-based Authentication Only
 
 The VM is configured with password authentication disabled. Only SSH key authentication is allowed.

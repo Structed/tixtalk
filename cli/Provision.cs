@@ -245,6 +245,15 @@ public static partial class Provision
             var privateKeyPath = sshKeyPath.Replace(".pub", "");
             if (File.Exists(privateKeyPath))
                 config.KeyFile = privateKeyPath;
+            
+            // Save Azure resource info for SSH access control
+            var resourceGroupName = GetPulumiOutput("resourceGroupName");
+            if (!string.IsNullOrWhiteSpace(resourceGroupName))
+            {
+                config.ResourceGroup = resourceGroupName;
+                config.NsgName = $"{prefix}-nsg";
+                AnsiConsole.MarkupLine($"[green]✓[/] Azure NSG info saved for SSH access control");
+            }
 
             config.Save();
             AnsiConsole.MarkupLine($"[green]✓[/] CLI configured to connect to [yellow]azureuser@{vmIp}[/]");
