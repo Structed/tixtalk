@@ -72,14 +72,14 @@ public static class CloudInitBuilder
         string mailFrom,
         string acsVerificationRecords)
     {
-        // Build .env content and base64-encode it
+        // Build .env content and base64-encode it (ensure Unix line endings)
         var envContent = BuildEnvContent(cfg, dbUser, dbPassword, pretixSecret, pretalxSecret,
             smtpHost, smtpUser, smtpPassword, mailFrom);
-        var envBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(envContent));
+        var envBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(envContent.Replace("\r\n", "\n")));
 
-        // Build setup script and base64-encode it
+        // Build setup script and base64-encode it (ensure Unix line endings)
         var setupScript = BuildSetupScript(cfg, dbUser, adminPassword, acsVerificationRecords);
-        var scriptBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(setupScript));
+        var scriptBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(setupScript.Replace("\r\n", "\n")));
 
         // Build minimal cloud-init YAML — no block scalars, no heredocs
         var sb = new StringBuilder();
