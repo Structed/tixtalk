@@ -67,7 +67,7 @@ upsert_record() {
             "${CF_API}/zones/${CLOUDFLARE_ZONE_ID}/dns_records/${record_id}" \
             -H "$AUTH_HEADER" \
             -H "Content-Type: application/json" \
-            --data "{\"type\":\"A\",\"name\":\"${name}\",\"content\":\"${ip}\",\"ttl\":1,\"proxied\":${proxied}}" \
+            --data "{\"type\":\"A\",\"name\":\"${name}\",\"content\":\"${ip}\",\"ttl\":1,\"proxied\":${proxied},\"comment\":\"Managed by ptx\"}" \
             > /dev/null
         echo "updated"
     else
@@ -76,7 +76,7 @@ upsert_record() {
             "${CF_API}/zones/${CLOUDFLARE_ZONE_ID}/dns_records" \
             -H "$AUTH_HEADER" \
             -H "Content-Type: application/json" \
-            --data "{\"type\":\"A\",\"name\":\"${name}\",\"content\":\"${ip}\",\"ttl\":1,\"proxied\":${proxied}}" \
+            --data "{\"type\":\"A\",\"name\":\"${name}\",\"content\":\"${ip}\",\"ttl\":1,\"proxied\":${proxied},\"comment\":\"Managed by ptx\"}" \
             > /dev/null
         echo "created"
     fi

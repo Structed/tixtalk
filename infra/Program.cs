@@ -109,7 +109,6 @@ return await Deployment.RunAsync(() =>
         AdminPassword = secrets.AdminPassword.Result,
         OrganiserName = organiserName,
         OrganiserSlug = organiserSlug,
-        AcsVerificationRecords = acsVerificationRecords,
     });
 
     // 6. Ubuntu 24.04 LTS Virtual Machine
@@ -122,6 +121,21 @@ return await Deployment.RunAsync(() =>
         SshPublicKey = sshPublicKey,
         CloudInitScript = cloudInit,
     });
+
+    // 7. Cloudflare DNS records (managed by Pulumi so they're cleaned up on destroy)
+    if (!string.IsNullOrEmpty(cloudflareApiToken) && !string.IsNullOrEmpty(cloudflareZoneId))
+    {
+        CloudflareDnsStack.Create(new CloudflareDnsArgs
+        {
+            Prefix = prefix,
+            Domain = domain,
+            CloudflareApiToken = cloudflareApiToken,
+            CloudflareZoneId = cloudflareZoneId,
+            Proxied = cloudflareDnsChallenge == "true",
+            VmPublicIp = vm.PublicIpAddress,
+            AcsVerificationRecords = acsVerificationRecords,
+        });
+    }
 
     // Outputs
     var outputs = new Dictionary<string, object?>
