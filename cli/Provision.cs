@@ -54,6 +54,7 @@ public static partial class Provision
         var defaultPrefix = domain.Split('.')[0].ToLowerInvariant();
         defaultPrefix = Regex.Replace(defaultPrefix, "[^a-z0-9-]", "");
         var rawPrefix = AnsiConsole.Ask("Azure resource name [green]prefix[/]:", defaultPrefix);
+        rawPrefix = Regex.Replace(rawPrefix.ToLowerInvariant(), "[^a-z0-9-]", "");
         var prefix = $"{rawPrefix}-{environment}";
 
         var sshKeyPath = DetectSshKey();

@@ -9,7 +9,11 @@ return await Deployment.RunAsync(() =>
     var domain = config.Require("domain");
     var sshPublicKey = config.Require("sshPublicKey");
     var vmSize = config.Get("vmSize") ?? "Standard_B2s";
-    var environment = config.Get("environment") ?? "dev";
+    var environment = (config.Get("environment") ?? "dev").Trim().ToLowerInvariant();
+    if (environment is not ("dev" or "prod"))
+    {
+        throw new ArgumentException($"Invalid value for config 'environment': '{environment}'. Allowed values are 'dev' or 'prod'.");
+    }
     var pretixImageTag = config.Get("pretixImageTag") ?? "stable";
     var pretalxImageTag = config.Get("pretalxImageTag") ?? "latest";
     var repoUrl = config.Get("repoUrl") ?? "https://github.com/Structed/tixtalk.git";

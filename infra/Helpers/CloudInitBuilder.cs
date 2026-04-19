@@ -378,14 +378,19 @@ create_pretalx_admin() {{
         sb.Append("\n");
 
         // Install backup cron (prod only)
-        if (cfg.Environment == "prod")
+        var environment = (cfg.Environment ?? string.Empty).Trim();
+        if (string.Equals(environment, "prod", StringComparison.OrdinalIgnoreCase))
         {
             sb.Append("echo 'Installing backup cron job...'\n");
             sb.Append("bash scripts/backup.sh --install-cron || echo 'WARNING: Failed to install backup cron'\n");
         }
-        else
+        else if (string.Equals(environment, "dev", StringComparison.OrdinalIgnoreCase))
         {
             sb.Append("echo 'Skipping backup cron (dev environment)'\n");
+        }
+        else
+        {
+            throw new ArgumentException($"Unsupported environment '{cfg.Environment}'. Expected 'dev' or 'prod'.", nameof(cfg.Environment));
         }
         sb.Append("\n");
         sb.Append("echo '=== tixtalk setup complete ==='\n");
