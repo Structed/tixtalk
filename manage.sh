@@ -67,6 +67,14 @@ cmd_update() {
     bash "$SCRIPTS/update.sh" "$@"
 }
 
+cmd_upgrade() {
+    cd "$SCRIPT_DIR"
+    echo "Pulling latest code..."
+    git pull
+    echo ""
+    cmd_update "$@"
+}
+
 cmd_logs() {
     cd "$SCRIPT_DIR"
     local service="${1:-}"
@@ -205,6 +213,8 @@ Commands:
   status               Show service status, URLs, and disk usage
   update [--pretix TAG] [--pretalx TAG]
                        Pull latest images and restart
+  upgrade [--pretix TAG] [--pretalx TAG]
+                       Pull latest code + images and restart
   logs [service]       Tail logs (all services or specific one)
   backup [--install-cron]
                        Back up databases (or install daily cron job)
@@ -251,11 +261,11 @@ show_menu() {
 
     echo "╠══════════════════════════════════════════╣"
     echo "║                                          ║"
-    echo "║   1) Status          5) Backup            "
-    echo "║   2) Update          6) Restore           "
-    echo "║   3) Logs            7) Shell             "
-    echo "║   4) Restart         8) DNS records        "
-    echo "║   9) Periodic tasks                        "
+    echo "║   1) Status          6) Backup            "
+    echo "║   2) Update images   7) Restore           "
+    echo "║   3) Upgrade (code)  8) Shell             "
+    echo "║   4) Logs            9) DNS records        "
+    echo "║   5) Restart         0) Periodic tasks     "
     echo "║                                           "
     echo "║   s) Setup (first time)                   "
     echo "║   d) Deploy (first time)                  "
@@ -275,13 +285,14 @@ show_menu() {
             [ -n "$xtag" ] && args+=(--pretalx "$xtag")
             cmd_update "${args[@]+"${args[@]}"}"
             ;;
-        3)
+        3) cmd_upgrade ;;
+        4)
             echo "Services: caddy, postgres, redis, pretix, pretalx"
             read -p "Service (leave empty for all): " svc
             cmd_logs "$svc"
             ;;
-        4) cmd_restart ;;
-        5)
+        5) cmd_restart ;;
+        6)
             echo "  1) Run backup now"
             echo "  2) Install daily cron job"
             read -p "Choose: " bchoice
@@ -291,14 +302,14 @@ show_menu() {
                 *) echo "Invalid choice." ;;
             esac
             ;;
-        6) cmd_restore ;;
-        7)
+        7) cmd_restore ;;
+        8)
             echo "Services: pretix, pretalx, postgres, redis, caddy"
             read -p "Service (default: pretix): " svc
             cmd_shell "${svc:-pretix}"
             ;;
-        8) cmd_dns ;;
-        9)
+        9) cmd_dns ;;
+        0)
             echo "  1) Run periodic tasks now"
             echo "  2) Install cron job (every 5 minutes)"
             echo "  3) Remove cron job"
@@ -329,6 +340,7 @@ else
         deploy)   shift; cmd_deploy "$@" ;;
         status)   shift; cmd_status "$@" ;;
         update)   shift; cmd_update "$@" ;;
+        upgrade)  shift; cmd_upgrade "$@" ;;
         logs)     shift; cmd_logs "$@" ;;
         backup)   shift; cmd_backup "$@" ;;
         cron)     shift; cmd_cron "$@" ;;

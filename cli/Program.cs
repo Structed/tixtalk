@@ -21,6 +21,7 @@ return command switch
     "deploy" => remote.RunCommand("deploy"),
     "setup" => remote.RunCommand("setup"),
     "update" => remote.RunCommand($"update {string.Join(' ', commandArgs)}"),
+    "upgrade" => remote.RunCommand($"upgrade {string.Join(' ', commandArgs)}"),
     "logs" => remote.RunInteractive($"logs {string.Join(' ', commandArgs)}"),
     "backup" => remote.RunCommand($"backup {string.Join(' ', commandArgs)}"),
     "cron" => remote.RunCommand($"cron {string.Join(' ', commandArgs)}"),
@@ -96,6 +97,7 @@ int ShowHelp()
     table.AddRow("[green]deploy[/]", "First-time deployment (generates secrets, starts services)");
     table.AddRow("[green]setup[/]", "Install Docker & configure firewall on the server");
     table.AddRow("[green]update[/] [[--pretix TAG]] [[--pretalx TAG]]", "Pull latest images and restart");
+    table.AddRow("[green]upgrade[/] [[--pretix TAG]] [[--pretalx TAG]]", "Pull latest code + images and restart");
     table.AddRow("[green]logs[/] [[service]]", "Tail service logs (Ctrl+C to stop)");
     table.AddRow("[green]backup[/] [[--install-cron]]", "Back up databases (or install daily cron)");
     table.AddRow("[green]cron[/] [[--install|--remove]]", "Run periodic tasks (or install/remove cron)");

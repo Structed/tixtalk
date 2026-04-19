@@ -55,6 +55,7 @@ public static class Menu
                 {
                     "Status",
                     "Update containers",
+                    "Upgrade (code + containers)",
                     "View logs",
                     "Restart services",
                     "Backup databases",
@@ -90,6 +91,7 @@ public static class Menu
         {
             "Status" => remote.RunCommand("status"),
             "Update containers" => PromptUpdate(remote),
+            "Upgrade (code + containers)" => remote.RunCommand("upgrade"),
             "View logs" => PromptLogs(remote),
             "Restart services" => remote.RunCommand("restart"),
             "Backup databases" => PromptBackup(remote),

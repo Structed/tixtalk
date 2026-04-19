@@ -184,6 +184,7 @@ tixtalk connect azureuser@your-server-ip
 tixtalk                      # Interactive menu (Spectre.Console UI)
 tixtalk status               # Service status + URLs
 tixtalk update               # Pull latest images + restart
+tixtalk upgrade              # Pull latest code + images + restart
 tixtalk logs pretix          # Tail pretix logs
 tixtalk backup               # Backup databases
 tixtalk cron --install  # Install periodic task cron
@@ -236,6 +237,15 @@ When SSHed into the server directly, use `manage.sh`:
 # Update both
 ./manage.sh update --pretix 2025.1.0 --pretalx 2025.1.0
 ```
+
+### Upgrading (Code + Containers)
+
+```bash
+# Pull latest code from git, then update images and restart
+./manage.sh upgrade
+```
+
+This runs `git pull` followed by the full update flow. Use this after new features or fixes are pushed to the repo (e.g., the periodic task cron added above).
 
 ### Periodic Tasks
 
