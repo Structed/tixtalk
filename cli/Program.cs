@@ -103,7 +103,7 @@ int ShowHelp()
     table.AddRow("[green]setup[/]", "Install Docker & configure firewall on the server");
     table.AddRow("[green]update[/] [[--pretix TAG]] [[--pretalx TAG]]", "Pull latest images and restart");
     table.AddRow("[green]upgrade[/] [[--pretix TAG]] [[--pretalx TAG]]", "Pull latest code + images and restart");
-    table.AddRow("[green]logs[/] [[service]]", "Tail service logs (Ctrl+C to stop)");
+    table.AddRow("[green]logs[/] [[service]]", "Tail logs (service, cron, or backup-cron)");
     table.AddRow("[green]backup[/] [[--install-cron]]", "Back up databases (or install daily cron)");
     table.AddRow("[green]cron[/] [[--install|--remove]]", "Run periodic tasks (or install/remove cron)");
     table.AddRow("[green]restore[/]", "Restore database from backup (interactive)");

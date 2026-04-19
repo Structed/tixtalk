@@ -133,7 +133,7 @@ public static class Menu
         var service = AnsiConsole.Prompt(
             new SelectionPrompt<string>()
                 .Title("Which service?")
-                .AddChoices("All services", "pretix", "pretalx", "caddy", "postgres", "redis"));
+                .AddChoices("All services", "pretix", "pretalx", "caddy", "postgres", "redis", "cron", "backup-cron"));
 
         var arg = service == "All services" ? "" : service;
         return remote.RunInteractive($"logs {arg}");

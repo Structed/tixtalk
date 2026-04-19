@@ -85,11 +85,22 @@ cmd_upgrade() {
 cmd_logs() {
     cd "$SCRIPT_DIR"
     local service="${1:-}"
-    if [ -n "$service" ]; then
-        docker compose logs "$service" --tail 100 -f
-    else
-        docker compose logs --tail 50 -f
-    fi
+    case "$service" in
+        cron)
+            echo "=== Periodic task cron log ==="
+            tail -50 /var/log/tixtalk-cron.log 2>/dev/null || echo "(no cron log yet — has the cron job run?)"
+            ;;
+        backup-cron)
+            echo "=== Backup cron log ==="
+            tail -50 /var/log/tixtalk-backup.log 2>/dev/null || echo "(no backup log yet — has the cron job run?)"
+            ;;
+        "")
+            docker compose logs --tail 50 -f
+            ;;
+        *)
+            docker compose logs "$service" --tail 100 -f
+            ;;
+    esac
 }
 
 cmd_backup() {
@@ -222,7 +233,7 @@ Commands:
                        Pull latest images and restart
   upgrade [--pretix TAG] [--pretalx TAG]
                        Pull latest code + images and restart
-  logs [service]       Tail logs (all services or specific one)
+  logs [service]       Tail logs (all services, or: pretix, pretalx, cron, backup-cron)
   backup [--install-cron]
                        Back up databases (or install daily cron job)
   cron [--install|--remove]
