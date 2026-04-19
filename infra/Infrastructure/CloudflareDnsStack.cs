@@ -1,5 +1,6 @@
 using Pulumi;
 using Pulumi.Cloudflare;
+using DnsRecordResponse = Pulumi.AzureNative.Communication.Outputs.DnsRecordResponse;
 
 namespace TixTalk.Infra.Infrastructure;
 
@@ -11,11 +12,29 @@ public record CloudflareDnsArgs
     public required string CloudflareZoneId { get; init; }
     public bool Proxied { get; init; } = false;
     public required Output<string> VmPublicIp { get; init; }
+}
+
+public record CloudflareAcsVerificationArgs
+{
+    public required string Prefix { get; init; }
+    public required string CloudflareApiToken { get; init; }
+    public required string CloudflareZoneId { get; init; }
     /// <summary>
-    /// JSON-serialized ACS verification records (from AzureCommunicationStack).
-    /// Null when ACS custom domain is not used.
+    /// The verification records from the ACS Domain resource, as individual typed outputs.
     /// </summary>
-    public Output<string>? AcsVerificationRecords { get; init; }
+    public required Output<DnsRecordResponse?> DomainRecord { get; init; }
+    public required Output<DnsRecordResponse?> SpfRecord { get; init; }
+    public required Output<DnsRecordResponse?> DkimRecord { get; init; }
+    public required Output<DnsRecordResponse?> Dkim2Record { get; init; }
+}
+
+/// <summary>
+/// Result from creating ACS verification DNS records, providing explicit resources
+/// for dependency tracking.
+/// </summary>
+public record CloudflareAcsVerificationResult
+{
+    public required DnsRecord[] DnsRecords { get; init; }
 }
 
 /// <summary>
@@ -27,7 +46,10 @@ public static class CloudflareDnsStack
     private const string Comment = "Managed by tixtalk";
     private const string AcsComment = "Managed by tixtalk (ACS email)";
 
-    public static void Create(CloudflareDnsArgs args)
+    /// <summary>
+    /// Creates A records for tickets.{domain} and talks.{domain}.
+    /// </summary>
+    public static void CreateAppRecords(CloudflareDnsArgs args)
     {
         var provider = new Provider($"{args.Prefix}-cf", new ProviderArgs
         {
@@ -58,92 +80,59 @@ public static class CloudflareDnsStack
             Proxied = args.Proxied,
             Comment = Comment,
         }, opts);
-
-        // ACS email verification DNS records (custom domain only)
-        if (args.AcsVerificationRecords != null)
-        {
-            CreateAcsVerificationRecords(args, opts);
-        }
     }
 
-    private static void CreateAcsVerificationRecords(CloudflareDnsArgs args, CustomResourceOptions opts)
+    /// <summary>
+    /// Creates ACS email verification DNS records (Domain TXT, SPF TXT, DKIM/DKIM2 CNAMEs)
+    /// as top-level resources with proper dependency tracking.
+    /// Returns the created DNS records so they can be used as explicit dependencies.
+    /// </summary>
+    public static CloudflareAcsVerificationResult CreateAcsVerificationRecords(CloudflareAcsVerificationArgs args)
     {
-        args.AcsVerificationRecords!.Apply(json =>
+        // Separate provider instance for ACS records (app records keep {prefix}-cf for migration)
+        var provider = new Provider($"{args.Prefix}-cf-acs", new ProviderArgs
         {
-            if (string.IsNullOrEmpty(json) || json == "{}")
-                return 0;
-
-            using var doc = System.Text.Json.JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            // Domain ownership TXT record
-            if (root.TryGetProperty("domain", out var domain))
-            {
-                var name = domain.GetProperty("name").GetString()!;
-                var value = domain.GetProperty("value").GetString()!;
-                var ttl = domain.GetProperty("ttl").GetInt32();
-                _ = new DnsRecord($"{args.Prefix}-acs-domain", new DnsRecordArgs
-                {
-                    ZoneId = args.CloudflareZoneId,
-                    Name = name,
-                    Type = "TXT",
-                    Content = value,
-                    Ttl = ttl,
-                    Comment = AcsComment,
-                }, opts);
-            }
-
-            // SPF TXT record
-            if (root.TryGetProperty("spf", out var spf))
-            {
-                var name = spf.GetProperty("name").GetString()!;
-                var value = spf.GetProperty("value").GetString()!;
-                var ttl = spf.GetProperty("ttl").GetInt32();
-                _ = new DnsRecord($"{args.Prefix}-acs-spf", new DnsRecordArgs
-                {
-                    ZoneId = args.CloudflareZoneId,
-                    Name = name,
-                    Type = "TXT",
-                    Content = value,
-                    Ttl = ttl,
-                    Comment = AcsComment,
-                }, opts);
-            }
-
-            // DKIM CNAME records
-            if (root.TryGetProperty("dkim", out var dkim))
-            {
-                var name = dkim.GetProperty("name").GetString()!;
-                var value = dkim.GetProperty("value").GetString()!;
-                var ttl = dkim.GetProperty("ttl").GetInt32();
-                _ = new DnsRecord($"{args.Prefix}-acs-dkim", new DnsRecordArgs
-                {
-                    ZoneId = args.CloudflareZoneId,
-                    Name = name,
-                    Type = "CNAME",
-                    Content = value,
-                    Ttl = ttl,
-                    Comment = AcsComment,
-                }, opts);
-            }
-
-            if (root.TryGetProperty("dkim2", out var dkim2))
-            {
-                var name = dkim2.GetProperty("name").GetString()!;
-                var value = dkim2.GetProperty("value").GetString()!;
-                var ttl = dkim2.GetProperty("ttl").GetInt32();
-                _ = new DnsRecord($"{args.Prefix}-acs-dkim2", new DnsRecordArgs
-                {
-                    ZoneId = args.CloudflareZoneId,
-                    Name = name,
-                    Type = "CNAME",
-                    Content = value,
-                    Ttl = ttl,
-                    Comment = AcsComment,
-                }, opts);
-            }
-
-            return 0;
+            ApiToken = args.CloudflareApiToken,
         });
+
+        var opts = new CustomResourceOptions { Provider = provider };
+
+        // Helper to create a DNS record only when the verification record has real values
+        DnsRecord CreateVerificationRecord(string suffix, string type,
+            Output<DnsRecordResponse?> record)
+        {
+            return new DnsRecord($"{args.Prefix}-acs-{suffix}", new DnsRecordArgs
+            {
+                ZoneId = args.CloudflareZoneId,
+                Name = record.Apply(r =>
+                {
+                    if (r is null || string.IsNullOrEmpty(r.Name))
+                        throw new Exception($"ACS verification record '{suffix}' has no Name. Domain may not be ready.");
+                    return r.Name;
+                }),
+                Type = type,
+                Content = record.Apply(r =>
+                {
+                    if (r is null || string.IsNullOrEmpty(r.Value))
+                        throw new Exception($"ACS verification record '{suffix}' has no Value. Domain may not be ready.");
+                    return r.Value;
+                }),
+                Ttl = record.Apply(r => (double)(r?.Ttl ?? 3600)),
+                Comment = AcsComment,
+            }, opts);
+        }
+
+        var records = new[]
+        {
+            CreateVerificationRecord("domain", "TXT", args.DomainRecord),
+            CreateVerificationRecord("spf", "TXT", args.SpfRecord),
+            CreateVerificationRecord("dkim", "CNAME", args.DkimRecord),
+            CreateVerificationRecord("dkim2", "CNAME", args.Dkim2Record),
+        };
+
+        return new CloudflareAcsVerificationResult
+        {
+            DnsRecords = records,
+        };
     }
 }

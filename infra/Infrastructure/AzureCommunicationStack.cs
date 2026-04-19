@@ -8,7 +8,22 @@ using Guid = System.Guid;
 namespace TixTalk.Infra.Infrastructure;
 
 /// <summary>
-/// Output record for ACS Email resources.
+/// Output record for phase 1: domain + email service creation.
+/// </summary>
+public record AzureDomainResult
+{
+    public required EmailService EmailService { get; init; }
+    public required Domain Domain { get; init; }
+    public required Output<string> MailFrom { get; init; }
+    /// <summary>
+    /// DNS verification records needed for custom domains (JSON serialized).
+    /// Null when using an Azure-managed domain.
+    /// </summary>
+    public Output<string>? VerificationRecords { get; init; }
+}
+
+/// <summary>
+/// Output record for phase 2: communication service + SMTP credentials.
 /// </summary>
 public record AzureCommunicationResult
 {
@@ -22,11 +37,6 @@ public record AzureCommunicationResult
     /// Allows other projects to use this ACS via Pulumi Stack Reference.
     /// </summary>
     public required Output<string> ConnectionString { get; init; }
-    /// <summary>
-    /// DNS verification records needed for custom domains (JSON serialized).
-    /// Only populated when using a custom domain.
-    /// </summary>
-    public Output<string>? VerificationRecords { get; init; }
 }
 
 /// <summary>
@@ -41,8 +51,29 @@ public record AzureCommunicationArgs
 }
 
 /// <summary>
+/// Arguments for creating the communication service (phase 2).
+/// </summary>
+public record AzureCommunicationServiceArgs
+{
+    public required string Prefix { get; init; }
+    public required ResourceGroup ResourceGroup { get; init; }
+    public required AzureDomainResult DomainResult { get; init; }
+    /// <summary>
+    /// Optional explicit dependencies (e.g., verification command) that must
+    /// complete before the CommunicationService is created.
+    /// </summary>
+    public CustomResourceOptions? DependsOn { get; init; }
+}
+
+/// <summary>
 /// Creates Azure Communication Services with Email capability.
-/// Supports both Azure-managed domains and custom domains (when Cloudflare is configured).
+/// Split into two phases to allow DNS verification between domain creation and service linking.
+/// <list type="bullet">
+///   <item><see cref="CreateDomain"/> — Phase 1: EmailService + Domain + SenderUsername</item>
+///   <item><see cref="CreateService"/> — Phase 2: CommunicationService + Entra App + SMTP creds</item>
+/// </list>
+/// For Azure-managed domains, both phases can be called back-to-back (no verification needed).
+/// For custom domains, DNS records must be created and verified between the two phases.
 /// </summary>
 public static class AzureCommunicationStack
 {
@@ -50,7 +81,12 @@ public static class AzureCommunicationStack
     // Minimal role for sending email via ACS SMTP
     private const string EmailOwnerRoleId = "09976791-48a7-449e-bb21-39d1a415f350";
 
-    public static AzureCommunicationResult Create(AzureCommunicationArgs args)
+    /// <summary>
+    /// Phase 1: Creates the Email Service, Domain, and SenderUsername.
+    /// For custom domains, the returned VerificationRecords must be used to create DNS records
+    /// and initiate verification before calling <see cref="CreateService"/>.
+    /// </summary>
+    public static AzureDomainResult CreateDomain(AzureCommunicationArgs args)
     {
         // 1. Create the Email Service first (domains belong to email service)
         var emailService = new EmailService($"{args.Prefix}-email", new EmailServiceArgs
@@ -115,7 +151,7 @@ public static class AzureCommunicationStack
         }
 
         // 3. Create a sender username for 'noreply'
-        var senderUsername = new SenderUsername($"{args.Prefix}-noreply", new SenderUsernameArgs
+        _ = new SenderUsername($"{args.Prefix}-noreply", new SenderUsernameArgs
         {
             SenderUsername = "noreply",
             Username = "noreply",
@@ -125,16 +161,34 @@ public static class AzureCommunicationStack
             ResourceGroupName = args.ResourceGroup.Name,
         });
 
-        // 4. Create the Communication Service and link the domain
+        return new AzureDomainResult
+        {
+            EmailService = emailService,
+            Domain = domain,
+            MailFrom = mailFrom,
+            VerificationRecords = verificationRecords,
+        };
+    }
+
+    /// <summary>
+    /// Phase 2: Creates the CommunicationService (linked to the domain),
+    /// Entra ID App + Service Principal, and SMTP credentials.
+    /// For custom domains, the domain must be verified before calling this method.
+    /// </summary>
+    public static AzureCommunicationResult CreateService(AzureCommunicationServiceArgs args)
+    {
+        var domainResult = args.DomainResult;
+
+        // 4. Create the Communication Service and link the verified domain
         var communicationService = new CommunicationService($"{args.Prefix}-acs", new CommunicationServiceArgs
         {
             CommunicationServiceName = $"{args.Prefix}-acs",
             ResourceGroupName = args.ResourceGroup.Name,
             DataLocation = "Europe",
             Location = "Global",
-            LinkedDomains = { domain.Id },
+            LinkedDomains = { domainResult.Domain.Id },
             Tags = { { "managed-by", "pulumi" } },
-        });
+        }, args.DependsOn);
 
         // 5. Create Entra ID Application for SMTP authentication
         var app = new Application($"{args.Prefix}-email-app", new ApplicationArgs
@@ -161,7 +215,7 @@ public static class AzureCommunicationStack
         var clientConfig = Pulumi.AzureNative.Authorization.GetClientConfig.Invoke();
 
         // 9. Assign "Communication and Email Service Owner" role to the service principal
-        var roleAssignment = new RoleAssignment($"{args.Prefix}-email-role", new RoleAssignmentArgs
+        _ = new RoleAssignment($"{args.Prefix}-email-role", new RoleAssignmentArgs
         {
             RoleAssignmentName = Guid.NewGuid().ToString(),
             Scope = communicationService.Id,
@@ -189,10 +243,9 @@ public static class AzureCommunicationStack
             SmtpHost = Output.Create("smtp.azurecomm.net"),
             SmtpUser = smtpUser,
             SmtpPassword = appPassword.Value,
-            MailFrom = mailFrom,
-            EmailServiceId = emailService.Id,
+            MailFrom = domainResult.MailFrom,
+            EmailServiceId = domainResult.EmailService.Id,
             ConnectionString = connectionString,
-            VerificationRecords = verificationRecords,
         };
     }
 }
