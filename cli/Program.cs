@@ -37,6 +37,11 @@ return command switch
 
 int Connect(string[] cArgs)
 {
+    if (cArgs.Length == 0 && config.IsConfigured)
+    {
+        return remote.OpenSession();
+    }
+
     config.RunConnect(cArgs.Length > 0 ? cArgs[0] : null);
     return 0;
 }
@@ -91,7 +96,7 @@ int ShowHelp()
         .AddColumn("[bold]Description[/]");
 
     table.AddRow("[green]provision[/]", "Provision a new Azure VM (interactive wizard)");
-    table.AddRow("[green]connect[/] <user@host>", "Configure SSH connection to the server");
+    table.AddRow("[green]connect[/] [[user@host]]", "SSH to the server (or configure a new connection)");
     table.AddRow("[green]ssh[/] <open|close|status|config>", "Control Azure NSG SSH access");
     table.AddRow("[green]status[/]", "Show service status, URLs, and disk usage");
     table.AddRow("[green]deploy[/]", "First-time deployment (generates secrets, starts services)");

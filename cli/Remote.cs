@@ -14,6 +14,51 @@ public sealed class Remote
     }
 
     /// <summary>
+    /// Open an interactive SSH session (raw shell) to the remote server.
+    /// </summary>
+    public int OpenSession()
+    {
+        EnsureConfigured();
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "ssh",
+            UseShellExecute = false,
+        };
+
+        psi.ArgumentList.Add("-t");
+        psi.ArgumentList.Add("-o");
+        psi.ArgumentList.Add("ConnectTimeout=30");
+
+        if (!string.IsNullOrWhiteSpace(_config.KeyFile))
+        {
+            psi.ArgumentList.Add("-i");
+            psi.ArgumentList.Add(ExpandPath(_config.KeyFile));
+        }
+
+        psi.ArgumentList.Add(_config.Host);
+
+        try
+        {
+            using var process = Process.Start(psi);
+            if (process == null)
+            {
+                AnsiConsole.MarkupLine("[red]Failed to start ssh process.[/]");
+                return 1;
+            }
+
+            process.WaitForExit();
+            return process.ExitCode;
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]Failed to launch ssh:[/] {Markup.Escape(ex.Message)}");
+            AnsiConsole.MarkupLine("[grey]Make sure 'ssh' is on your PATH (built-in on Windows 10+, macOS, Linux).[/]");
+            return 1;
+        }
+    }
+
+    /// <summary>
     /// Run a manage.sh subcommand (non-interactive, streams output).
     /// Prefers native ssh when an SSH agent is available (1Password, ssh-agent, Pageant).
     /// Falls back to SSH.NET when no agent is detected and keys are unencrypted.
