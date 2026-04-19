@@ -31,6 +31,13 @@ public static partial class Provision
         if (!CheckPrerequisite("pulumi", "--version", "Pulumi CLI"))
             return 1;
 
+        // Environment selection (dev vs prod)
+        var environment = AnsiConsole.Prompt(
+            new SelectionPrompt<string>()
+                .Title("Deployment [green]environment[/]:")
+                .AddChoices(new[] { "dev", "prod" }));
+        var isDev = environment == "dev";
+
         // Gather configuration with validation
         var domain = AnsiConsole.Prompt(
             new TextPrompt<string>("Your [green]domain[/] (e.g., yourdomain.com):")
@@ -46,7 +53,9 @@ public static partial class Provision
         // Derive a resource name prefix from the domain (e.g., "godotfest.org" → "godotfest")
         var defaultPrefix = domain.Split('.')[0].ToLowerInvariant();
         defaultPrefix = Regex.Replace(defaultPrefix, "[^a-z0-9-]", "");
-        var prefix = AnsiConsole.Ask("Azure resource name [green]prefix[/]:", defaultPrefix);
+        var rawPrefix = AnsiConsole.Ask("Azure resource name [green]prefix[/]:", defaultPrefix);
+        rawPrefix = Regex.Replace(rawPrefix.ToLowerInvariant(), "[^a-z0-9-]", "");
+        var prefix = $"{rawPrefix}-{environment}";
 
         var sshKeyPath = DetectSshKey();
         sshKeyPath = AnsiConsole.Ask("SSH public key file:", sshKeyPath);
@@ -92,16 +101,25 @@ public static partial class Provision
         
         if (useAzureMail)
         {
-            // ACS domain type selection
-            var domainChoice = AnsiConsole.Prompt(
-                new SelectionPrompt<string>()
-                    .Title("ACS email domain type:")
-                    .AddChoices(new[] {
-                        $"Custom domain (noreply@{domain})",
-                        "Azure-managed (noreply@xxx.azurecomm.net)"
-                    }));
+            if (isDev)
+            {
+                // Dev environment always uses Azure-managed domain (no custom domain setup needed)
+                acsUseCustomDomain = false;
+                AnsiConsole.MarkupLine("[grey]Dev environment: using Azure-managed email domain.[/]");
+            }
+            else
+            {
+                // Prod: prompt for ACS domain type
+                var domainChoice = AnsiConsole.Prompt(
+                    new SelectionPrompt<string>()
+                        .Title("ACS email domain type:")
+                        .AddChoices(new[] {
+                            $"Custom domain (noreply@{domain})",
+                            "Azure-managed (noreply@xxx.azurecomm.net)"
+                        }));
             
-            acsUseCustomDomain = domainChoice.StartsWith("Custom");
+                acsUseCustomDomain = domainChoice.StartsWith("Custom");
+            }
             
             if (acsUseCustomDomain)
             {
@@ -170,6 +188,7 @@ public static partial class Provision
         var summaryTable = new Table().Border(TableBorder.Rounded);
         summaryTable.AddColumn("Setting");
         summaryTable.AddColumn("Value");
+        summaryTable.AddRow("Environment", isDev ? "[yellow]dev[/]" : "[green]prod[/]");
         summaryTable.AddRow("Prefix", prefix);
         summaryTable.AddRow("Domain", domain);
         summaryTable.AddRow("Region", region);
@@ -188,6 +207,7 @@ public static partial class Provision
         }
         
         summaryTable.AddRow("Cloudflare", configureCloudflare ? "enabled" : "[grey]not configured[/]");
+        summaryTable.AddRow("Backups", isDev ? "[grey]skipped (dev)[/]" : "[green]daily[/]");
         AnsiConsole.Write(summaryTable);
 
         AnsiConsole.WriteLine();
@@ -201,10 +221,10 @@ public static partial class Provision
         AnsiConsole.WriteLine();
         AnsiConsole.Write(new Rule("[blue]Step 1/3: Configuring Pulumi[/]").RuleStyle("blue"));
 
-        if (RunPulumi("stack init dev --non-interactive", allowFailure: true) != 0)
+        if (RunPulumi($"stack init {environment} --non-interactive", allowFailure: true) != 0)
         {
             // Stack may already exist — select it
-            RunPulumi("stack select dev");
+            RunPulumi($"stack select {environment}");
         }
 
         // Set config values
@@ -214,6 +234,7 @@ public static partial class Provision
         SetConfig("tixtalk:sshPublicKey", sshPublicKey);
         SetConfig("tixtalk:vmSize", vmSize);
         SetConfig("tixtalk:adminEmail", adminEmail);
+        SetConfig("tixtalk:environment", environment);
         
         // Email configuration
         SetConfig("tixtalk:useAzureMail", useAzureMail.ToString().ToLower());

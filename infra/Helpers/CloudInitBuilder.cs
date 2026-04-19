@@ -8,6 +8,7 @@ public record CloudInitConfig
     public required string RepoUrl { get; init; }
     public string RepoBranch { get; init; } = ""; // Empty = default branch
     public required string Domain { get; init; }
+    public string Environment { get; init; } = "dev";
     public required Output<string> DbUser { get; init; }
     public required Output<string> DbPassword { get; init; }
     public required Output<string> PretixSecretKey { get; init; }
@@ -376,9 +377,21 @@ create_pretalx_admin() {{
         sb.Append("systemctl start cron\n");
         sb.Append("\n");
 
-        // Install backup cron (non-fatal if it fails)
-        sb.Append("echo 'Installing backup cron job...'\n");
-        sb.Append("bash scripts/backup.sh --install-cron || echo 'WARNING: Failed to install backup cron'\n");
+        // Install backup cron (prod only)
+        var environment = (cfg.Environment ?? string.Empty).Trim();
+        if (string.Equals(environment, "prod", StringComparison.OrdinalIgnoreCase))
+        {
+            sb.Append("echo 'Installing backup cron job...'\n");
+            sb.Append("bash scripts/backup.sh --install-cron || echo 'WARNING: Failed to install backup cron'\n");
+        }
+        else if (string.Equals(environment, "dev", StringComparison.OrdinalIgnoreCase))
+        {
+            sb.Append("echo 'Skipping backup cron (dev environment)'\n");
+        }
+        else
+        {
+            throw new ArgumentException($"Unsupported environment '{cfg.Environment}'. Expected 'dev' or 'prod'.", nameof(cfg.Environment));
+        }
         sb.Append("\n");
         sb.Append("echo '=== tixtalk setup complete ==='\n");
 
