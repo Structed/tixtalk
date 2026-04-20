@@ -15,11 +15,6 @@ public record AzureDomainResult
     public required EmailService EmailService { get; init; }
     public required Domain Domain { get; init; }
     public required Output<string> MailFrom { get; init; }
-    /// <summary>
-    /// DNS verification records needed for custom domains (JSON serialized).
-    /// Null when using an Azure-managed domain.
-    /// </summary>
-    public Output<string>? VerificationRecords { get; init; }
 }
 
 /// <summary>
@@ -62,7 +57,7 @@ public record AzureCommunicationServiceArgs
     /// Optional explicit dependencies (e.g., verification command) that must
     /// complete before the CommunicationService is created.
     /// </summary>
-    public CustomResourceOptions? DependsOn { get; init; }
+    public InputList<Pulumi.Resource>? DependsOn { get; init; }
 }
 
 /// <summary>
@@ -101,7 +96,6 @@ public static class AzureCommunicationStack
 
         // 2. Create Domain - Azure-managed or custom
         Output<string> mailFrom;
-        Output<string>? verificationRecords = null;
         Domain domain;
 
         if (args.UseCustomDomain)
@@ -117,24 +111,6 @@ public static class AzureCommunicationStack
             });
 
             mailFrom = Output.Create($"noreply@{args.Domain}");
-
-            verificationRecords = domain.VerificationRecords.Apply(vr =>
-            {
-                var records = new System.Text.Json.Nodes.JsonObject();
-                if (vr?.Domain != null)
-                    records["domain"] = System.Text.Json.Nodes.JsonNode.Parse(
-                        $"{{\"type\":\"{vr.Domain.Type}\",\"name\":\"{vr.Domain.Name}\",\"value\":\"{vr.Domain.Value}\",\"ttl\":{vr.Domain.Ttl}}}");
-                if (vr?.SPF != null)
-                    records["spf"] = System.Text.Json.Nodes.JsonNode.Parse(
-                        $"{{\"type\":\"{vr.SPF.Type}\",\"name\":\"{vr.SPF.Name}\",\"value\":\"{vr.SPF.Value}\",\"ttl\":{vr.SPF.Ttl}}}");
-                if (vr?.DKIM != null)
-                    records["dkim"] = System.Text.Json.Nodes.JsonNode.Parse(
-                        $"{{\"type\":\"{vr.DKIM.Type}\",\"name\":\"{vr.DKIM.Name}\",\"value\":\"{vr.DKIM.Value}\",\"ttl\":{vr.DKIM.Ttl}}}");
-                if (vr?.DKIM2 != null)
-                    records["dkim2"] = System.Text.Json.Nodes.JsonNode.Parse(
-                        $"{{\"type\":\"{vr.DKIM2.Type}\",\"name\":\"{vr.DKIM2.Name}\",\"value\":\"{vr.DKIM2.Value}\",\"ttl\":{vr.DKIM2.Ttl}}}");
-                return records.ToJsonString();
-            });
         }
         else
         {
@@ -167,7 +143,6 @@ public static class AzureCommunicationStack
             EmailService = emailService,
             Domain = domain,
             MailFrom = mailFrom,
-            VerificationRecords = verificationRecords,
         };
     }
 
@@ -189,7 +164,7 @@ public static class AzureCommunicationStack
             Location = "Global",
             LinkedDomains = { domainResult.Domain.Id },
             Tags = { { "managed-by", "pulumi" } },
-        }, args.DependsOn);
+        }, args.DependsOn != null ? new CustomResourceOptions { DependsOn = args.DependsOn } : null);
 
         // 5. Create Entra ID Application for SMTP authentication
         var app = new Application($"{args.Prefix}-email-app", new ApplicationArgs

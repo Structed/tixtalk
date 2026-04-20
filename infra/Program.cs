@@ -74,8 +74,7 @@ return await Deployment.RunAsync(() =>
     var secrets = SecretGenerator.Create(prefix);
 
     // 4. Azure Communication Services (optional - for email)
-    //    Split into two phases for custom domains:
-    //    Phase 1: Create domain → Phase 2: Verify → Phase 3: Create service
+    //    Phase 1: Create domain → verify DNS → Phase 2: Create service
     Output<string> finalSmtpHost = Output.Create(smtpHost);
     Output<string> finalSmtpUser = Output.Create(smtpUser);
     Output<string> finalSmtpPassword = Output.Create(smtpPassword);
@@ -93,7 +92,7 @@ return await Deployment.RunAsync(() =>
             UseCustomDomain = acsUseCustomDomain,
         });
 
-        CustomResourceOptions? serviceDependsOn = null;
+        InputList<Resource>? serviceDependsOn = null;
 
         if (acsUseCustomDomain)
         {
@@ -120,10 +119,7 @@ return await Deployment.RunAsync(() =>
                 DependsOn = acsVerificationDns.DnsRecords.Cast<Resource>().ToArray(),
             });
 
-            serviceDependsOn = new CustomResourceOptions
-            {
-                DependsOn = { verificationCmd },
-            };
+            serviceDependsOn = new InputList<Resource> { verificationCmd };
         }
 
         // Phase 2: Create CommunicationService (with LinkedDomains) + SMTP creds
