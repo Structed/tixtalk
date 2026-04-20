@@ -39,34 +39,45 @@ $COMPOSE_CMD pull --ignore-buildable 2>/dev/null || $COMPOSE_CMD pull 2>/dev/nul
 echo "Restarting services..."
 $COMPOSE_CMD up -d --build
 
-# Migrate cron jobs from root to current user (fixes cloud-init installing as root)
-if [ "$(id -u)" -ne 0 ] && sudo crontab -l 2>/dev/null | grep -q "tixtalk"; then
+# Determine the project owner (for installing cron jobs under the right user)
+PROJECT_OWNER="$(stat -c '%U' "$PROJECT_DIR")"
+
+# Migrate cron jobs from root to project owner (fixes cloud-init installing as root)
+if sudo crontab -l 2>/dev/null | grep -q "tixtalk"; then
     echo ""
-    echo "Migrating cron jobs from root to $(id -un)..."
-    # Remove tixtalk entries from root's crontab
+    echo "Migrating cron jobs from root to $PROJECT_OWNER..."
     ( sudo crontab -l 2>/dev/null | grep -v "tixtalk" || true ) | sudo crontab -
     echo "Cron jobs removed from root's crontab."
 fi
 
 # Fix backup directory ownership if it was created by root
-if [ -d "$PROJECT_DIR/backups" ] && [ ! -w "$PROJECT_DIR/backups" ]; then
+if [ -d "$PROJECT_DIR/backups" ] && [ "$(stat -c '%U' "$PROJECT_DIR/backups")" = "root" ]; then
     echo "Fixing backup directory permissions..."
-    sudo chown "$(id -u):$(id -g)" "$PROJECT_DIR/backups"
+    sudo chown "$PROJECT_OWNER:$(stat -c '%G' "$PROJECT_DIR")" "$PROJECT_DIR/backups"
     echo "Backup directory ownership fixed."
 fi
 
+# Install cron jobs as the project owner (not root)
+install_cron_as_owner() {
+    if [ "$(id -un)" = "$PROJECT_OWNER" ]; then
+        "$@"
+    else
+        sudo -u "$PROJECT_OWNER" "$@"
+    fi
+}
+
 # Auto-install periodic task cron if not already present
-if ! crontab -l 2>/dev/null | grep -q "scripts/cron.sh"; then
+if ! sudo -u "$PROJECT_OWNER" crontab -l 2>/dev/null | grep -q "scripts/cron.sh"; then
     echo ""
     echo "Installing periodic task cron job (runs every 5 minutes)..."
-    bash "$SCRIPT_DIR/cron.sh" --install
+    install_cron_as_owner bash "$SCRIPT_DIR/cron.sh" --install
 fi
 
 # Auto-install backup cron if not already present
-if ! crontab -l 2>/dev/null | grep -q "scripts/backup.sh"; then
+if ! sudo -u "$PROJECT_OWNER" crontab -l 2>/dev/null | grep -q "scripts/backup.sh"; then
     echo ""
     echo "Installing backup cron job (daily 3 AM)..."
-    bash "$SCRIPT_DIR/backup.sh" --install-cron
+    install_cron_as_owner bash "$SCRIPT_DIR/backup.sh" --install-cron
 fi
 
 echo ""

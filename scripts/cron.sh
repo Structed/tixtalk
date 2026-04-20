@@ -32,7 +32,7 @@ fi
 
 # Remove cron job if requested
 if [ "${1:-}" = "--remove" ]; then
-    ( crontab -l 2>/dev/null || true ) | ( grep -v "tixtalk-cron" || true ) | crontab -
+    ( crontab -l 2>/dev/null || true ) | ( grep -v "tixtalk-cron" || true ) | ( grep -v "scripts/cron.sh" || true ) | crontab -
     log "Removed periodic task cron job."
     exit 0
 fi
