@@ -88,11 +88,11 @@ cmd_logs() {
     case "$service" in
         cron)
             echo "=== Periodic task cron log ==="
-            tail -50 /var/log/tixtalk-cron.log 2>/dev/null || echo "(no cron log yet — has the cron job run?)"
+            tail -50 "$SCRIPT_DIR/logs/cron.log" 2>/dev/null || tail -50 /var/log/tixtalk-cron.log 2>/dev/null || echo "(no cron log yet — has the cron job run?)"
             ;;
         backup-cron)
             echo "=== Backup cron log ==="
-            tail -50 /var/log/tixtalk-backup.log 2>/dev/null || echo "(no backup log yet — has the cron job run?)"
+            tail -50 "$SCRIPT_DIR/logs/backup.log" 2>/dev/null || tail -50 /var/log/tixtalk-backup.log 2>/dev/null || echo "(no backup log yet — has the cron job run?)"
             ;;
         "")
             docker compose logs --tail 50 -f

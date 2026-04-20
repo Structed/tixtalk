@@ -382,8 +382,9 @@ create_pretalx_admin() {{
         sb.Append("\n");
 
         // Install periodic task cron (required for both dev and prod — runs runperiodic for pretix/pretalx)
+        // Run as azureuser so cron jobs fire as azureuser (owns project dir, has docker group)
         sb.Append("echo 'Installing periodic task cron job...'\n");
-        sb.Append("bash scripts/cron.sh --install || echo 'WARNING: Failed to install periodic task cron'\n");
+        sb.Append("sudo -u azureuser bash scripts/cron.sh --install || echo 'WARNING: Failed to install periodic task cron'\n");
         sb.Append("\n");
 
         // Install backup cron (prod only)
@@ -391,7 +392,7 @@ create_pretalx_admin() {{
         if (string.Equals(environment, "prod", StringComparison.OrdinalIgnoreCase))
         {
             sb.Append("echo 'Installing backup cron job...'\n");
-            sb.Append("bash scripts/backup.sh --install-cron || echo 'WARNING: Failed to install backup cron'\n");
+            sb.Append("sudo -u azureuser bash scripts/backup.sh --install-cron || echo 'WARNING: Failed to install backup cron'\n");
         }
         else if (string.Equals(environment, "dev", StringComparison.OrdinalIgnoreCase))
         {

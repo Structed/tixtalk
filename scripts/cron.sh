@@ -21,10 +21,12 @@ cd "$PROJECT_DIR"
 
 # Install cron job if requested
 if [ "${1:-}" = "--install" ]; then
-    CRON_CMD="*/5 * * * * cd $PROJECT_DIR && ./scripts/cron.sh >> /var/log/tixtalk-cron.log 2>&1"
-    ( crontab -l 2>/dev/null || true ) | ( grep -v "tixtalk-cron" || true ) | { cat; echo "$CRON_CMD"; } | crontab -
+    LOG_DIR="$PROJECT_DIR/logs"
+    mkdir -p "$LOG_DIR"
+    CRON_CMD="*/5 * * * * cd $PROJECT_DIR && ./scripts/cron.sh >> $LOG_DIR/cron.log 2>&1"
+    ( crontab -l 2>/dev/null || true ) | ( grep -v "tixtalk-cron" || true ) | ( grep -v "scripts/cron.sh" || true ) | { cat; echo "$CRON_CMD"; } | crontab -
     log "Installed periodic task cron job (every 5 minutes)."
-    echo "Logs: /var/log/tixtalk-cron.log"
+    echo "Logs: $LOG_DIR/cron.log"
     exit 0
 fi
 

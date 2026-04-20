@@ -1,5 +1,6 @@
 .env
 backups/
+logs/
 
 # IDE
 .idea/
