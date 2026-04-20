@@ -14,6 +14,7 @@
     <PackageReference Include="Pulumi.AzureAD" Version="6.9.0" />
     <PackageReference Include="Pulumi.AzureNative" Version="2.*" />
     <PackageReference Include="Pulumi.Cloudflare" Version="6.14.0" />
+    <PackageReference Include="Pulumi.Command" Version="1.*" />
     <PackageReference Include="Pulumi.Random" Version="4.*" />
   </ItemGroup>
 

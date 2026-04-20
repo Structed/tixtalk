@@ -49,6 +49,16 @@ return await Deployment.RunAsync(() =>
     var smtpPassword = config.Get("smtpPassword") ?? "";
     var mailFrom = config.Get("mailFrom") ?? $"noreply@{domain}";
 
+    // Fail fast: custom ACS domain requires Cloudflare for DNS automation
+    if (useAzureMail && acsUseCustomDomain &&
+        (string.IsNullOrEmpty(cloudflareApiToken) || string.IsNullOrEmpty(cloudflareZoneId)))
+    {
+        throw new ArgumentException(
+            "Custom ACS domain requires Cloudflare DNS automation. " +
+            "Set 'cloudflareApiToken' and 'cloudflareZoneId' config values, " +
+            "or switch to Azure-managed domain (set 'acsUseCustomDomain' to false).");
+    }
+
     // Admin superuser config
     var adminEmail = config.Get("adminEmail") ?? "";
     var organiserName = config.Get("organiserName") ?? "Conference Organiser";
@@ -64,30 +74,68 @@ return await Deployment.RunAsync(() =>
     var secrets = SecretGenerator.Create(prefix);
 
     // 4. Azure Communication Services (optional - for email)
+    //    Phase 1: Create domain → verify DNS → Phase 2: Create service
     Output<string> finalSmtpHost = Output.Create(smtpHost);
     Output<string> finalSmtpUser = Output.Create(smtpUser);
     Output<string> finalSmtpPassword = Output.Create(smtpPassword);
     Output<string> finalMailFrom = Output.Create(mailFrom);
-    Output<string>? acsVerificationRecords = null;
     
     AzureCommunicationResult? acsResult = null;
     if (useAzureMail)
     {
-        // Use Azure Communication Services for email
-        // Custom domain requires Cloudflare for DNS automation
-        acsResult = AzureCommunicationStack.Create(new AzureCommunicationArgs
+        // Phase 1: Create Email Service + Domain + SenderUsername
+        var domainResult = AzureCommunicationStack.CreateDomain(new AzureCommunicationArgs
         {
             Prefix = prefix,
             Domain = domain,
             ResourceGroup = rg,
             UseCustomDomain = acsUseCustomDomain,
         });
+
+        InputList<Resource>? serviceDependsOn = null;
+
+        if (acsUseCustomDomain)
+        {
+            // Create ACS verification DNS records (top-level, proper dependency tracking)
+            var acsVerificationDns = CloudflareDnsStack.CreateAcsVerificationRecords(
+                new CloudflareAcsVerificationArgs
+                {
+                    Prefix = prefix,
+                    CloudflareApiToken = cloudflareApiToken,
+                    CloudflareZoneId = cloudflareZoneId,
+                    DomainRecord = domainResult.Domain.VerificationRecords.Apply(vr => vr?.Domain),
+                    SpfRecord = domainResult.Domain.VerificationRecords.Apply(vr => vr?.SPF),
+                    DkimRecord = domainResult.Domain.VerificationRecords.Apply(vr => vr?.DKIM),
+                    Dkim2Record = domainResult.Domain.VerificationRecords.Apply(vr => vr?.DKIM2),
+                });
+
+            // Initiate and wait for domain verification (depends on DNS records)
+            var verificationCmd = DomainVerificationCommand.Create(new DomainVerificationArgs
+            {
+                Prefix = prefix,
+                DomainName = domain,
+                EmailServiceName = domainResult.EmailService.Name,
+                ResourceGroupName = rg.Name,
+                DependsOn = acsVerificationDns.DnsRecords.Cast<Resource>().ToArray(),
+            });
+
+            serviceDependsOn = new InputList<Resource> { verificationCmd };
+        }
+
+        // Phase 2: Create CommunicationService (with LinkedDomains) + SMTP creds
+        // For custom domains, this waits for verification to complete
+        acsResult = AzureCommunicationStack.CreateService(new AzureCommunicationServiceArgs
+        {
+            Prefix = prefix,
+            ResourceGroup = rg,
+            DomainResult = domainResult,
+            DependsOn = serviceDependsOn,
+        });
         
         finalSmtpHost = acsResult.SmtpHost;
         finalSmtpUser = acsResult.SmtpUser;
         finalSmtpPassword = acsResult.SmtpPassword;
         finalMailFrom = acsResult.MailFrom;
-        acsVerificationRecords = acsResult.VerificationRecords;
     }
 
     // 5. Cloud-init script to bootstrap the VM
@@ -128,10 +176,11 @@ return await Deployment.RunAsync(() =>
         CloudInitScript = cloudInit,
     });
 
-    // 7. Cloudflare DNS records (managed by Pulumi so they're cleaned up on destroy)
+    // 7. Cloudflare app DNS records (A records for tickets/talks subdomains)
+    //    Separated from ACS verification DNS to avoid dependency cycle (VM ↔ DNS)
     if (!string.IsNullOrEmpty(cloudflareApiToken) && !string.IsNullOrEmpty(cloudflareZoneId))
     {
-        CloudflareDnsStack.Create(new CloudflareDnsArgs
+        CloudflareDnsStack.CreateAppRecords(new CloudflareDnsArgs
         {
             Prefix = prefix,
             Domain = domain,
@@ -139,7 +188,6 @@ return await Deployment.RunAsync(() =>
             CloudflareZoneId = cloudflareZoneId,
             Proxied = cloudflareDnsChallenge == "true",
             VmPublicIp = vm.PublicIpAddress,
-            AcsVerificationRecords = acsVerificationRecords,
         });
     }
 
