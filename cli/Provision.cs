@@ -36,7 +36,7 @@ public static partial class Provision
 
         // Subscription selection
         var (subName, subId) = SelectSubscription();
-        if (subName == null)
+        if (subName == null || subId == null)
             return 1;
 
         // Environment selection (dev vs prod)
@@ -196,7 +196,7 @@ public static partial class Provision
         var summaryTable = new Table().Border(TableBorder.Rounded);
         summaryTable.AddColumn("Setting");
         summaryTable.AddColumn("Value");
-        summaryTable.AddRow("Subscription", $"[green]{Markup.Escape(subName)}[/] [grey]({subId})[/]");
+        summaryTable.AddRow("Subscription", $"[green]{Markup.Escape(subName)}[/] [grey]({Markup.Escape(subId)})[/]");
         summaryTable.AddRow("Environment", isDev ? "[yellow]dev[/]" : "[green]prod[/]");
         summaryTable.AddRow("Prefix", prefix);
         summaryTable.AddRow("Domain", domain);
@@ -476,6 +476,8 @@ public static partial class Provision
         catch
         {
             AnsiConsole.MarkupLine("[red]Error:[/] Could not parse subscription list.");
+            if (!string.IsNullOrWhiteSpace(output))
+                AnsiConsole.MarkupLine($"[grey]{Markup.Escape(output.Trim())}[/]");
             return (null, null);
         }
 
@@ -488,7 +490,7 @@ public static partial class Provision
         if (subs.Count == 1)
         {
             var only = subs[0];
-            AnsiConsole.MarkupLine($"Azure subscription: [green]{Markup.Escape(only.Name)}[/] [grey]({only.Id})[/]");
+            AnsiConsole.MarkupLine($"Azure subscription: [green]{Markup.Escape(only.Name)}[/] [grey]({Markup.Escape(only.Id)})[/]");
             return (only.Name, only.Id);
         }
 

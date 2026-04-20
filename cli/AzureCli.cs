@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using Spectre.Console;
 
 namespace TixTalk.Cli;
@@ -71,17 +72,18 @@ public static class AzureCli
                 return (1, "Failed to start az command");
 
             // Read stderr asynchronously to avoid deadlock when both buffers fill
-            string stderr = "";
+            var stderr = new StringBuilder();
             process.ErrorDataReceived += (_, e) =>
             {
-                if (e.Data != null) stderr += e.Data + Environment.NewLine;
+                if (e.Data != null)
+                    lock (stderr) { stderr.AppendLine(e.Data); }
             };
             process.BeginErrorReadLine();
 
             var stdout = process.StandardOutput.ReadToEnd();
-            process.WaitForExit();
+            process.WaitForExit(); // also waits for async stderr to flush
 
-            var output = string.IsNullOrWhiteSpace(stdout) ? stderr.TrimEnd() : stdout;
+            var output = string.IsNullOrWhiteSpace(stdout) ? stderr.ToString().TrimEnd() : stdout;
             return (process.ExitCode, output);
         }
         catch (Exception ex)

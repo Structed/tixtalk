@@ -199,7 +199,7 @@ public static class SshAccess
         var subscriptionId = AnsiConsole.Ask(
             "Subscription ID ([grey]optional[/]):",
             string.IsNullOrWhiteSpace(config.SubscriptionId) ? "" : config.SubscriptionId);
-        config.SubscriptionId = subscriptionId;
+        config.SubscriptionId = subscriptionId.Trim();
         
         var resourceGroup = AnsiConsole.Ask(
             "Resource Group name:", 
