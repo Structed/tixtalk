@@ -17,6 +17,7 @@ public sealed class AppConfig
     // Azure resource info (for SSH access control)
     public string ResourceGroup { get; set; } = "";
     public string NsgName { get; set; } = "";
+    public string SubscriptionId { get; set; } = "";
 
     private static readonly string ConfigDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),

@@ -31,6 +31,14 @@ public static partial class Provision
         if (!CheckPrerequisite("pulumi", "--version", "Pulumi CLI"))
             return 1;
 
+        if (!AzureCli.Validate())
+            return 1;
+
+        // Subscription selection
+        var (subName, subId) = SelectSubscription();
+        if (subName == null)
+            return 1;
+
         // Environment selection (dev vs prod)
         var environment = AnsiConsole.Prompt(
             new SelectionPrompt<string>()
@@ -188,6 +196,7 @@ public static partial class Provision
         var summaryTable = new Table().Border(TableBorder.Rounded);
         summaryTable.AddColumn("Setting");
         summaryTable.AddColumn("Value");
+        summaryTable.AddRow("Subscription", $"[green]{Markup.Escape(subName)}[/] [grey]({subId})[/]");
         summaryTable.AddRow("Environment", isDev ? "[yellow]dev[/]" : "[green]prod[/]");
         summaryTable.AddRow("Prefix", prefix);
         summaryTable.AddRow("Domain", domain);
@@ -229,6 +238,7 @@ public static partial class Provision
 
         // Set config values
         SetConfig("azure-native:location", region);
+        SetConfig("azure-native:subscriptionId", subId!);
         SetConfig("tixtalk:prefix", prefix);
         SetConfig("tixtalk:domain", domain);
         SetConfig("tixtalk:sshPublicKey", sshPublicKey);
@@ -315,6 +325,8 @@ public static partial class Provision
             {
                 config.ResourceGroup = resourceGroupName;
                 config.NsgName = $"{prefix}-nsg";
+                if (!string.IsNullOrWhiteSpace(subId))
+                    config.SubscriptionId = subId;
                 AnsiConsole.MarkupLine($"[green]✓[/] Azure NSG info saved for SSH access control");
             }
 
@@ -429,6 +441,73 @@ public static partial class Provision
             AnsiConsole.MarkupLine($"  [blue]https://www.pulumi.com/docs/install/[/]");
             return false;
         }
+    }
+
+    private static (string? Name, string? Id) SelectSubscription()
+    {
+        var (exitCode, output) = AzureCli.RunCommand(
+            "account", "list", "--query", "[].{name:name, id:id, isDefault:isDefault}", "--output", "json");
+
+        if (exitCode != 0)
+        {
+            AnsiConsole.MarkupLine("[red]Error:[/] Failed to list Azure subscriptions.");
+            AnsiConsole.MarkupLine("Make sure you are logged in: [yellow]az login[/]");
+            if (!string.IsNullOrWhiteSpace(output))
+                AnsiConsole.MarkupLine($"[grey]{Markup.Escape(output.Trim())}[/]");
+            return (null, null);
+        }
+
+        List<(string Name, string Id, bool IsDefault)> subs;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(output);
+            subs = doc.RootElement.EnumerateArray()
+                .Select(e => (
+                    Name: e.GetProperty("name").GetString() ?? "(unnamed)",
+                    Id: e.GetProperty("id").GetString() ?? "",
+                    IsDefault: e.GetProperty("isDefault").GetBoolean()))
+                .OrderByDescending(s => s.IsDefault)
+                .ThenBy(s => s.Name)
+                .ToList();
+        }
+        catch
+        {
+            AnsiConsole.MarkupLine("[red]Error:[/] Could not parse subscription list.");
+            return (null, null);
+        }
+
+        if (subs.Count == 0)
+        {
+            AnsiConsole.MarkupLine("[red]No Azure subscriptions found.[/] Run [yellow]az login[/] first.");
+            return (null, null);
+        }
+
+        // Build display strings (mark the default)
+        var choices = subs.Select(s =>
+            s.IsDefault
+                ? $"{s.Name}  ({s.Id}) [default]"
+                : $"{s.Name}  ({s.Id})").ToList();
+
+        if (subs.Count == 1)
+        {
+            var only = subs[0];
+            AnsiConsole.MarkupLine($"Azure subscription: [green]{Markup.Escape(only.Name)}[/] [grey]({only.Id})[/]");
+            return (only.Name, only.Id);
+        }
+
+        var selected = AnsiConsole.Prompt(
+            new SelectionPrompt<string>()
+                .Title("Select Azure [green]subscription[/]:")
+                .PageSize(10)
+                .HighlightStyle(new Style(Color.Green))
+                .AddChoices(choices));
+
+        var idx = choices.IndexOf(selected);
+        var sub = subs[idx];
+
+        AnsiConsole.MarkupLine($"[green]✓[/] Using subscription: [yellow]{Markup.Escape(sub.Name)}[/]");
+
+        return (sub.Name, sub.Id);
     }
 
     private static string DetectSshKey()

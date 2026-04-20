@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net.Http;
 using Spectre.Console;
 
@@ -19,7 +18,7 @@ public static class SshAccess
         if (!ValidateAzureConfig(config))
             return 1;
         
-        if (!ValidateAzureCli())
+        if (!AzureCli.Validate())
             return 1;
         
         var sourceAddress = cidr;
@@ -40,7 +39,9 @@ public static class SshAccess
         
         AnsiConsole.MarkupLine($"Opening SSH access from [yellow]{sourceAddress}[/]...");
         
-        var (exitCode, output) = RunAzCommand(
+        var sub = config.SubscriptionId;
+        
+        var (exitCode, output) = AzureCli.RunCommand(sub,
             "network", "nsg", "rule", "update",
             "--resource-group", config.ResourceGroup,
             "--nsg-name", config.NsgName,
@@ -72,12 +73,12 @@ public static class SshAccess
         if (!ValidateAzureConfig(config))
             return 1;
         
-        if (!ValidateAzureCli())
+        if (!AzureCli.Validate())
             return 1;
         
         AnsiConsole.MarkupLine("Closing SSH access...");
         
-        var (exitCode, output) = RunAzCommand(
+        var (exitCode, output) = AzureCli.RunCommand(config.SubscriptionId,
             "network", "nsg", "rule", "update",
             "--resource-group", config.ResourceGroup,
             "--nsg-name", config.NsgName,
@@ -107,10 +108,10 @@ public static class SshAccess
         if (!ValidateAzureConfig(config))
             return 1;
         
-        if (!ValidateAzureCli())
+        if (!AzureCli.Validate())
             return 1;
         
-        var (exitCode, output) = RunAzCommand(
+        var (exitCode, output) = AzureCli.RunCommand(config.SubscriptionId,
             "network", "nsg", "rule", "show",
             "--resource-group", config.ResourceGroup,
             "--nsg-name", config.NsgName,
@@ -195,6 +196,11 @@ public static class SshAccess
         AnsiConsole.Write(new Rule("[blue]Azure NSG Configuration[/]").RuleStyle("blue"));
         AnsiConsole.MarkupLine("Configure Azure resource info to enable SSH access control.\n");
         
+        var subscriptionId = AnsiConsole.Ask(
+            "Subscription ID ([grey]optional[/]):",
+            string.IsNullOrWhiteSpace(config.SubscriptionId) ? "" : config.SubscriptionId);
+        config.SubscriptionId = subscriptionId;
+        
         var resourceGroup = AnsiConsole.Ask(
             "Resource Group name:", 
             string.IsNullOrWhiteSpace(config.ResourceGroup) ? "" : config.ResourceGroup);
@@ -208,6 +214,8 @@ public static class SshAccess
         config.Save();
         
         AnsiConsole.MarkupLine($"\n[green]✓[/] Azure config saved");
+        if (!string.IsNullOrWhiteSpace(config.SubscriptionId))
+            AnsiConsole.MarkupLine($"  Subscription: [yellow]{config.SubscriptionId}[/]");
         AnsiConsole.MarkupLine($"  Resource Group: [yellow]{config.ResourceGroup}[/]");
         AnsiConsole.MarkupLine($"  NSG Name: [yellow]{config.NsgName}[/]");
     }
@@ -220,18 +228,6 @@ public static class SshAccess
         AnsiConsole.MarkupLine("[red]Error:[/] Azure resource info not configured.");
         AnsiConsole.MarkupLine("Run [yellow]tixtalk ssh config[/] to set up Azure resource info,");
         AnsiConsole.MarkupLine("or run [yellow]tixtalk provision[/] to deploy a new Azure VM.");
-        return false;
-    }
-    
-    private static bool ValidateAzureCli()
-    {
-        var (exitCode, _) = RunAzCommand("version", "--output", "none");
-        if (exitCode == 0)
-            return true;
-        
-        AnsiConsole.MarkupLine("[red]Error:[/] Azure CLI (az) not found or not working.");
-        AnsiConsole.MarkupLine("Install it from: [blue]https://aka.ms/installazurecli[/]");
-        AnsiConsole.MarkupLine("Then run: [yellow]az login[/]");
         return false;
     }
     
@@ -261,96 +257,6 @@ public static class SshAccess
             {
                 // Try next service
             }
-        }
-        
-        return null;
-    }
-    
-    private static (int ExitCode, string Output) RunAzCommand(params string[] args)
-    {
-        var psi = new ProcessStartInfo
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        
-        if (OperatingSystem.IsWindows())
-        {
-            // On Windows, find az.cmd - it might be in various locations
-            var azPath = FindAzureCli();
-            if (azPath == null)
-                return (1, "Azure CLI not found");
-            
-            psi.FileName = azPath;
-        }
-        else
-        {
-            psi.FileName = "az";
-        }
-        
-        foreach (var arg in args)
-            psi.ArgumentList.Add(arg);
-        
-        try
-        {
-            using var process = Process.Start(psi);
-            if (process == null)
-                return (1, "Failed to start az command");
-            
-            var stdout = process.StandardOutput.ReadToEnd();
-            var stderr = process.StandardError.ReadToEnd();
-            process.WaitForExit();
-            
-            var output = string.IsNullOrWhiteSpace(stdout) ? stderr : stdout;
-            return (process.ExitCode, output);
-        }
-        catch (Exception ex)
-        {
-            return (1, ex.Message);
-        }
-    }
-    
-    private static string? FindAzureCli()
-    {
-        // Common Azure CLI installation paths on Windows
-        var possiblePaths = new[]
-        {
-            @"C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin\az.cmd",
-            @"C:\Program Files (x86)\Microsoft SDKs\Azure\CLI2\wbin\az.cmd",
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\Azure CLI\wbin\az.cmd"),
-        };
-        
-        foreach (var path in possiblePaths)
-        {
-            if (File.Exists(path))
-                return path;
-        }
-        
-        // Try to find via PATH using where.exe
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "where.exe",
-                Arguments = "az.cmd",
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using var process = Process.Start(psi);
-            if (process != null)
-            {
-                var output = process.StandardOutput.ReadLine();
-                process.WaitForExit();
-                if (!string.IsNullOrWhiteSpace(output) && File.Exists(output))
-                    return output;
-            }
-        }
-        catch
-        {
-            // Ignore
         }
         
         return null;
