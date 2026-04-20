@@ -34,10 +34,10 @@ done
 
 echo "Pulling latest images..."
 COMPOSE_CMD=$(compose_cmd)
-$COMPOSE_CMD pull --ignore-buildable 2>/dev/null || $COMPOSE_CMD pull 2>/dev/null || true
+$COMPOSE_CMD pull 2>/dev/null || true
 
 echo "Restarting services..."
-$COMPOSE_CMD up -d --build
+$COMPOSE_CMD up -d
 
 # Determine the project owner (for installing cron jobs under the right user)
 PROJECT_OWNER="$(stat -c '%U' "$PROJECT_DIR")"

@@ -239,7 +239,7 @@ retry() {
         sb.Append("cd /opt/tixtalk\n");
         if (cfg.CloudflareDnsChallenge == "true")
         {
-            sb.Append("docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d --build\n");
+            sb.Append("docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d\n");
         }
         else
         {

@@ -66,15 +66,15 @@ fi
 # Get compose command based on TLS mode
 COMPOSE_CMD=$(compose_cmd)
 if [ "${CLOUDFLARE_DNS_CHALLENGE:-false}" = "true" ]; then
-    echo "Using Cloudflare DNS challenge for TLS (building custom Caddy image)..."
+    echo "Using Cloudflare proxy mode (internal TLS)..."
 fi
 
 # Pull images and start
 echo "Pulling container images..."
-$COMPOSE_CMD pull --quiet --ignore-buildable 2>/dev/null || $COMPOSE_CMD pull --quiet 2>/dev/null || true
+$COMPOSE_CMD pull --quiet 2>/dev/null || true
 
 echo "Starting services..."
-$COMPOSE_CMD up -d --build
+$COMPOSE_CMD up -d
 
 echo ""
 echo "=== Deployment complete ==="

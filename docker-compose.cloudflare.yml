@@ -1,14 +1,13 @@
-# Compose override for Cloudflare DNS challenge TLS.
+# Compose override for Cloudflare-proxied deployments.
+# Uses internal TLS (self-signed) since Cloudflare handles edge certificates.
+# Requires Cloudflare SSL/TLS mode set to "Full" (not "Full Strict").
 # Used automatically by deploy.sh when CLOUDFLARE_DNS_CHALLENGE=true.
 # Manual usage: docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d
 services:
   caddy:
-    build: ./caddy
-    image: caddy-cloudflare:local
     volumes:
       - ./caddy/Caddyfile.dns:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     environment:
       DOMAIN: ${DOMAIN}
-      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
