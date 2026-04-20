@@ -9,6 +9,7 @@ services:
       - ./caddy/Caddyfile.dns:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+      - pretalx_data:/srv/pretalx:ro
     environment:
       DOMAIN: ${DOMAIN}
     healthcheck:
