@@ -18,10 +18,9 @@ cd "$PROJECT_DIR"
 if [ "${1:-}" = "--install-cron" ]; then
     LOG_DIR="$PROJECT_DIR/logs"
     mkdir -p "$LOG_DIR"
-    CRON_CMD="0 3 * * * mkdir -p $LOG_DIR && cd $PROJECT_DIR && ./scripts/backup.sh >> $LOG_DIR/backup.log 2>&1"
-    # Get existing crontab (ignore error if none exists), filter out old backup entries, add new one
-    # Note: grep -v returns 1 if no lines match, so we use || true to handle empty crontab
-    ( crontab -l 2>/dev/null || true ) | ( grep -v "tixtalk-backup" || true ) | ( grep -v "scripts/backup.sh" || true ) | { cat; echo "$CRON_CMD"; } | crontab -
+    CRON_CMD="0 3 * * * mkdir -p $LOG_DIR && cd $PROJECT_DIR && ./scripts/backup.sh >> $LOG_DIR/backup.log 2>&1 # tixtalk-backup"
+    # Filter out old entries (legacy marker or generic match), then add new one
+    ( crontab -l 2>/dev/null || true ) | ( grep -v "# tixtalk-backup" || true ) | ( grep -v "tixtalk-backup\.log" || true ) | { cat; echo "$CRON_CMD"; } | crontab -
     log "Installed daily backup cron job (3:00 AM)."
     echo "Logs: $LOG_DIR/backup.log"
     exit 0

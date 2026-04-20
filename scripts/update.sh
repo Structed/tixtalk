@@ -43,10 +43,10 @@ $COMPOSE_CMD up -d --build
 PROJECT_OWNER="$(stat -c '%U' "$PROJECT_DIR")"
 
 # Migrate cron jobs from root to project owner (fixes cloud-init installing as root)
-if sudo crontab -l 2>/dev/null | grep -qE "scripts/(cron|backup)\.sh|tixtalk-(cron|backup)"; then
+if sudo crontab -l 2>/dev/null | grep -qE "# tixtalk-(cron|backup)|tixtalk-(cron|backup)\.log"; then
     echo ""
     echo "Migrating cron jobs from root to $PROJECT_OWNER..."
-    ( sudo crontab -l 2>/dev/null | grep -vE "scripts/(cron|backup)\.sh|tixtalk-(cron|backup)" || true ) | sudo crontab -
+    ( sudo crontab -l 2>/dev/null | grep -vE "# tixtalk-(cron|backup)|tixtalk-(cron|backup)\.log" || true ) | sudo crontab -
     echo "Cron jobs removed from root's crontab."
 fi
 
