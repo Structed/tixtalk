@@ -85,12 +85,13 @@ public static class AzureCli
 
     private static string? FindCli()
     {
+        // Look for az.exe (not az.cmd) so we can launch directly with UseShellExecute=false
         var possiblePaths = new[]
         {
-            @"C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin\az.cmd",
-            @"C:\Program Files (x86)\Microsoft SDKs\Azure\CLI2\wbin\az.cmd",
+            @"C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin\az.exe",
+            @"C:\Program Files (x86)\Microsoft SDKs\Azure\CLI2\wbin\az.exe",
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                @"Programs\Azure CLI\wbin\az.cmd"),
+                @"Programs\Azure CLI\wbin\az.exe"),
         };
 
         foreach (var path in possiblePaths)
@@ -105,7 +106,7 @@ public static class AzureCli
             var psi = new ProcessStartInfo
             {
                 FileName = "where.exe",
-                Arguments = "az.cmd",
+                Arguments = "az.exe",
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
                 CreateNoWindow = true

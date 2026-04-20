@@ -482,11 +482,11 @@ public static partial class Provision
             return (null, null);
         }
 
-        // Build display strings (mark the default)
+        // Build display strings — escape names for Spectre markup safety
         var choices = subs.Select(s =>
             s.IsDefault
-                ? $"{s.Name}  ({s.Id}) [default]"
-                : $"{s.Name}  ({s.Id})").ToList();
+                ? $"{Markup.Escape(s.Name)}  ({Markup.Escape(s.Id)}) (default)"
+                : $"{Markup.Escape(s.Name)}  ({Markup.Escape(s.Id)})").ToList();
 
         if (subs.Count == 1)
         {
