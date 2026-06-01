@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pretalx-meettomatch"
+version = "0.1.0"
+description = "Pretalx plugin for MeetToMatch integration — syncs schedule and speakers on publish"
+requires-python = ">=3.10"
+dependencies = [
+    "meettomatch-client",
+]
+
+[project.entry-points."pretalx.plugin"]
+meettomatch = "pretalx_meettomatch:PretalxPluginMeta"

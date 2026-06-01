@@ -92,6 +92,10 @@ services:
       SECRET_KEY: ${PRETIX_SECRET_KEY}
     volumes:
       - pretix_data:/data
+      - ./plugins/meettomatch-client:/opt/plugins/meettomatch-client:ro
+      - ./plugins/pretix-meettomatch:/opt/plugins/pretix-meettomatch:ro
+      - ./plugins/install-plugins.sh:/opt/plugins/install-plugins.sh:ro
+    entrypoint: ["/bin/bash", "/opt/plugins/install-plugins.sh"]
 
   pretalx:
     image: pretalx/standalone:${PRETALX_IMAGE_TAG:-latest}
@@ -129,6 +133,10 @@ services:
       SECRET_KEY: ${PRETALX_SECRET_KEY}
     volumes:
       - pretalx_data:/data
+      - ./plugins/meettomatch-client:/opt/plugins/meettomatch-client:ro
+      - ./plugins/pretalx-meettomatch:/opt/plugins/pretalx-meettomatch:ro
+      - ./plugins/install-plugins.sh:/opt/plugins/install-plugins.sh:ro
+    entrypoint: ["/bin/bash", "/opt/plugins/install-plugins.sh"]
 
 volumes:
   caddy_data:

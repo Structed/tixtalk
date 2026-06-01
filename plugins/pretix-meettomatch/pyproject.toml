@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pretix-meettomatch"
+version = "0.1.0"
+description = "Pretix plugin for MeetToMatch integration — auto-creates attendee accounts on ticket purchase"
+requires-python = ">=3.10"
+dependencies = [
+    "meettomatch-client",
+]
+
+[project.entry-points."pretix.plugin"]
+meettomatch = "pretix_meettomatch:PretixPluginMeta"
