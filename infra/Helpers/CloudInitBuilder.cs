@@ -8,6 +8,7 @@ public record CloudInitConfig
     public required string RepoUrl { get; init; }
     public string RepoBranch { get; init; } = ""; // Empty = default branch
     public required string Domain { get; init; }
+    public string SubdomainPrefix { get; init; } = "";
     public string Environment { get; init; } = "dev";
     public required Output<string> DbUser { get; init; }
     public required Output<string> DbPassword { get; init; }
@@ -117,6 +118,11 @@ public static class CloudInitBuilder
     {
         var sb = new StringBuilder();
         sb.Append($"DOMAIN={cfg.Domain}\n");
+        var ticketsHost = $"{cfg.SubdomainPrefix}tickets.{cfg.Domain}";
+        var talksHost = $"{cfg.SubdomainPrefix}talks.{cfg.Domain}";
+        sb.Append($"SUBDOMAIN_PREFIX={cfg.SubdomainPrefix}\n");
+        sb.Append($"TICKETS_HOST={ticketsHost}\n");
+        sb.Append($"TALKS_HOST={talksHost}\n");
         sb.Append($"DB_USER={dbUser}\n");
         sb.Append($"DB_PASSWORD={dbPassword}\n");
         sb.Append($"PRETIX_SECRET_KEY={pretixSecret}\n");
@@ -131,6 +137,7 @@ public static class CloudInitBuilder
         sb.Append($"SMTP_PORT={cfg.SmtpPort}\n");
         sb.Append($"SMTP_USER={smtpUser}\n");
         sb.Append($"SMTP_PASSWORD={smtpPassword}\n");
+        sb.Append($"ENVIRONMENT={cfg.Environment}\n");
         return sb.ToString();
     }
 
@@ -228,19 +235,31 @@ retry() {
         // DNS records are now managed by Pulumi (CloudflareDnsStack) instead of cloud-init,
         // so they are automatically cleaned up on `pulumi destroy`.
 
-        // Configure swap (2 GB) to prevent OOM freezes
-        sb.Append("echo 'Configuring 2 GB swap...'\n");
-        sb.Append("fallocate -l 2G /swapfile\n");
-        sb.Append("chmod 600 /swapfile\n");
-        sb.Append("mkswap /swapfile\n");
-        sb.Append("swapon /swapfile\n");
-        sb.Append("echo '/swapfile none swap sw 0 0' >> /etc/fstab\n");
+        // Configure swap (2 GB) to prevent OOM freezes — skip if any swap is already active
+        sb.Append("if [ \"$(swapon --show --noheadings | wc -l)\" -eq 0 ]; then\n");
+        sb.Append("  echo 'Configuring 2 GB swap...'\n");
+        sb.Append("  fallocate -l 2G /swapfile\n");
+        sb.Append("  chmod 600 /swapfile\n");
+        sb.Append("  mkswap /swapfile\n");
+        sb.Append("  swapon /swapfile\n");
+        sb.Append("  if ! grep -q '/swapfile' /etc/fstab; then\n");
+        sb.Append("    echo '/swapfile none swap sw 0 0' >> /etc/fstab\n");
+        sb.Append("  fi\n");
+        sb.Append("  echo 'Swap configured.'\n");
+        sb.Append("else\n");
+        sb.Append("  echo 'Swap already active — skipping.'\n");
+        sb.Append("fi\n");
         sb.Append("\n");
 
-        // Configure sysctl for Redis (avoid background save failures)
-        sb.Append("echo 'Configuring system for Redis...'\n");
-        sb.Append("sysctl vm.overcommit_memory=1\n");
-        sb.Append("echo 'vm.overcommit_memory = 1' >> /etc/sysctl.conf\n");
+        // Configure sysctl for Redis (avoid background save failures) — guarded for idempotency
+        sb.Append("if ! grep -qx 'vm.overcommit_memory = 1' /etc/sysctl.conf; then\n");
+        sb.Append("  echo 'Configuring system for Redis...'\n");
+        sb.Append("  sed -i '/^vm\\.overcommit_memory/d' /etc/sysctl.conf\n");
+        sb.Append("  sysctl vm.overcommit_memory=1\n");
+        sb.Append("  echo 'vm.overcommit_memory = 1' >> /etc/sysctl.conf\n");
+        sb.Append("else\n");
+        sb.Append("  echo 'Redis sysctl already configured.'\n");
+        sb.Append("fi\n");
         sb.Append("\n");
 
         // Start services - use DNS challenge compose file if configured

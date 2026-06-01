@@ -1,0 +1,25 @@
+# Local development override — HTTP only, no TLS, no Cloudflare
+# Usage: ./manage.sh dev   (or: tixtalk dev up)
+# Note: uses project name 'tixtalk-local' to isolate from production volumes.
+name: tixtalk-local
+services:
+  caddy:
+    image: caddy:2.9-alpine
+    env_file: !override
+      - .env.local
+    ports: !override
+      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8001:8001"
+    volumes: !override
+      - ./caddy/Caddyfile.local:/etc/caddy/Caddyfile:ro
+      - pretalx_data:/srv/pretalx:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:8000"]
+
+  pretix:
+    environment:
+      PRETIX_PRETIX_URL: http://localhost:8000
+
+  pretalx:
+    environment:
+      PRETALX_SITE_URL: http://localhost:8001

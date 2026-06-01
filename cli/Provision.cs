@@ -246,6 +246,16 @@ public static partial class Provision
         SetConfig("tixtalk:adminEmail", adminEmail);
         SetConfig("tixtalk:environment", environment);
         
+        // Auto-set subdomain prefix for dev environments, clear for prod
+        if (isDev)
+        {
+            SetConfig("tixtalk:subdomainPrefix", "dev-");
+        }
+        else
+        {
+            SetConfig("tixtalk:subdomainPrefix", "");
+        }
+        
         // Email configuration
         SetConfig("tixtalk:useAzureMail", useAzureMail.ToString().ToLower());
         if (useAzureMail)
@@ -359,8 +369,14 @@ public static partial class Provision
             AnsiConsole.MarkupLine($"  [green]SSH:[/]     ssh azureuser@{vmIp}");
         }
 
-        AnsiConsole.MarkupLine($"  [green]Pretix:[/]  https://tickets.{domain}");
-        AnsiConsole.MarkupLine($"  [green]Pretalx:[/] https://talks.{domain}");
+        // Derive hostnames using the actual Pulumi outputs or config
+        var ticketsHostOutput = GetPulumiOutput("ticketsHost");
+        var ticketsHost = string.IsNullOrWhiteSpace(ticketsHostOutput) ? $"{(isDev ? "dev-" : "")}tickets.{domain}" : ticketsHostOutput;
+        var talksHostOutput = GetPulumiOutput("talksHost");
+        var talksHost = string.IsNullOrWhiteSpace(talksHostOutput) ? $"{(isDev ? "dev-" : "")}talks.{domain}" : talksHostOutput;
+
+        AnsiConsole.MarkupLine($"  [green]Pretix:[/]  https://{ticketsHost}");
+        AnsiConsole.MarkupLine($"  [green]Pretalx:[/] https://{talksHost}");
         AnsiConsole.WriteLine();
         
         // Email configuration info
@@ -396,8 +412,8 @@ public static partial class Provision
             AnsiConsole.MarkupLine($"  [green]Email:[/]    {adminEmail}");
             AnsiConsole.MarkupLine($"  [green]Password:[/] {adminPassword}");
             AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine($"  [green]Pretix Admin:[/]  https://tickets.{domain}/control/");
-            AnsiConsole.MarkupLine($"  [green]Pretalx Admin:[/] https://talks.{domain}/orga/");
+            AnsiConsole.MarkupLine($"  [green]Pretix Admin:[/]  https://{ticketsHost}/control/");
+            AnsiConsole.MarkupLine($"  [green]Pretalx Admin:[/] https://{talksHost}/orga/");
             AnsiConsole.WriteLine();
             AnsiConsole.MarkupLine("[grey]Save these credentials! They are stored encrypted in Pulumi state.[/]");
             AnsiConsole.MarkupLine("[grey]Retrieve later with: pulumi stack output adminPassword --show-secrets[/]");
@@ -407,8 +423,8 @@ public static partial class Provision
         if (!configureCloudflare)
         {
             AnsiConsole.MarkupLine("[yellow]Don't forget to set up DNS:[/]");
-            AnsiConsole.MarkupLine($"  tickets.{domain} → {vmIp}");
-            AnsiConsole.MarkupLine($"  talks.{domain}   → {vmIp}");
+            AnsiConsole.MarkupLine($"  {ticketsHost} → {vmIp}");
+            AnsiConsole.MarkupLine($"  {talksHost}   → {vmIp}");
             AnsiConsole.WriteLine();
         }
 

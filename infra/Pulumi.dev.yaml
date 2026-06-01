@@ -1,6 +1,7 @@
 config:
   azure-native:location: westeurope
   tixtalk:prefix: godotfest
+  tixtalk:environment: dev
   tixtalk:vmSize: Standard_B2s
   tixtalk:pretixImageTag: stable
   tixtalk:pretalxImageTag: latest

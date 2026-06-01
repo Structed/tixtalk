@@ -1,8 +1,8 @@
-tickets.{$DOMAIN} {
+{$TICKETS_HOST:localhost} {
     reverse_proxy pretix:80
 }
 
-talks.{$DOMAIN} {
+{$TALKS_HOST:localhost} {
     handle /media/* {
         root * /srv/pretalx
         file_server

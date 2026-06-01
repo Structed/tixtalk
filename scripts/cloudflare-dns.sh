@@ -82,9 +82,13 @@ upsert_record() {
     fi
 }
 
+# Resolve hostnames (support subdomain prefix)
+TICKETS_HOST="${TICKETS_HOST:-${SUBDOMAIN_PREFIX:-}tickets.${DOMAIN}}"
+TALKS_HOST="${TALKS_HOST:-${SUBDOMAIN_PREFIX:-}talks.${DOMAIN}}"
+
 echo "Setting up Cloudflare DNS records (server IP: ${SERVER_IP})..."
-upsert_record "tickets.${DOMAIN}" "$SERVER_IP" "$PROXIED"
-upsert_record "talks.${DOMAIN}" "$SERVER_IP" "$PROXIED"
+upsert_record "${TICKETS_HOST}" "$SERVER_IP" "$PROXIED"
+upsert_record "${TALKS_HOST}" "$SERVER_IP" "$PROXIED"
 echo "DNS records configured."
 
 # When using DNS challenge (proxied=true), set SSL mode to "full" so Cloudflare connects via HTTPS

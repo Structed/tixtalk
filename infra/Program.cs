@@ -9,13 +9,14 @@ return await Deployment.RunAsync(() =>
     var domain = config.Require("domain");
     var sshPublicKey = config.Require("sshPublicKey");
     var vmSize = config.Get("vmSize") ?? "Standard_B2s";
-    var environment = (config.Get("environment") ?? "dev").Trim().ToLowerInvariant();
+    var environment = (config.Get("environment") ?? "prod").Trim().ToLowerInvariant();
     if (environment is not ("dev" or "prod"))
     {
         throw new ArgumentException($"Invalid value for config 'environment': '{environment}'. Allowed values are 'dev' or 'prod'.");
     }
     var pretixImageTag = config.Get("pretixImageTag") ?? "stable";
     var pretalxImageTag = config.Get("pretalxImageTag") ?? "latest";
+    var subdomainPrefix = config.Get("subdomainPrefix") ?? (environment == "dev" ? "dev-" : "");
     var repoUrl = config.Get("repoUrl") ?? "https://github.com/Structed/tixtalk.git";
     var repoBranch = config.Get("repoBranch") ?? ""; // Empty = default branch
 
@@ -148,6 +149,7 @@ return await Deployment.RunAsync(() =>
         RepoUrl = repoUrl,
         RepoBranch = repoBranch,
         Domain = domain,
+        SubdomainPrefix = subdomainPrefix,
         Environment = environment,
         DbUser = Output.Create("tixtalk"),
         DbPassword = secrets.DbPassword.Result,
@@ -188,6 +190,7 @@ return await Deployment.RunAsync(() =>
         {
             Prefix = prefix,
             Domain = domain,
+            SubdomainPrefix = subdomainPrefix,
             CloudflareApiToken = cloudflareApiToken,
             CloudflareZoneId = cloudflareZoneId,
             Proxied = cloudflareDnsChallenge == "true",
@@ -196,14 +199,18 @@ return await Deployment.RunAsync(() =>
     }
 
     // Outputs
+    var ticketsHost = $"{subdomainPrefix}tickets.{domain}";
+    var talksHost = $"{subdomainPrefix}talks.{domain}";
     var outputs = new Dictionary<string, object?>
     {
         ["environment"] = environment,
         ["resourceGroupName"] = rg.Name,
         ["vmPublicIp"] = vm.PublicIpAddress,
         ["sshCommand"] = vm.PublicIpAddress.Apply(ip => $"ssh azureuser@{ip}"),
-        ["pretixUrl"] = $"https://tickets.{domain}",
-        ["pretalxUrl"] = $"https://talks.{domain}",
+        ["ticketsHost"] = ticketsHost,
+        ["talksHost"] = talksHost,
+        ["pretixUrl"] = $"https://{ticketsHost}",
+        ["pretalxUrl"] = $"https://{talksHost}",
     };
 
     // Add admin credentials to outputs if admin email is configured
@@ -211,8 +218,8 @@ return await Deployment.RunAsync(() =>
     {
         outputs["adminEmail"] = adminEmail;
         outputs["adminPassword"] = Output.CreateSecret(secrets.AdminPassword.Result);
-        outputs["pretixAdminUrl"] = $"https://tickets.{domain}/control/";
-        outputs["pretalxAdminUrl"] = $"https://talks.{domain}/orga/";
+        outputs["pretixAdminUrl"] = $"https://{ticketsHost}/control/";
+        outputs["pretalxAdminUrl"] = $"https://{talksHost}/orga/";
     }
 
     // Add ACS info to outputs if enabled

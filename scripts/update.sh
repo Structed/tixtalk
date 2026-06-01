@@ -12,6 +12,56 @@ cd "$PROJECT_DIR"
 # Load .env for configuration
 load_env || true
 
+# Backfill TICKETS_HOST / TALKS_HOST if missing or empty (added in v2.x for subdomain prefix support)
+if [ -f .env ]; then
+    if ! grep -q '^TICKETS_HOST=.\+' .env 2>/dev/null; then
+        if [ -z "${DOMAIN:-}" ] || [ "$DOMAIN" = "localhost" ]; then
+            echo "WARNING: DOMAIN is not set or is 'localhost' — skipping TICKETS_HOST backfill"
+        else
+            TICKETS_HOST="${SUBDOMAIN_PREFIX:-}tickets.${DOMAIN}"
+            if grep -q '^TICKETS_HOST=' .env 2>/dev/null; then
+                sed -i "s|^TICKETS_HOST=.*|TICKETS_HOST=${TICKETS_HOST}|" .env
+            else
+                echo "" >> .env
+                echo "TICKETS_HOST=${TICKETS_HOST}" >> .env
+            fi
+            echo "Backfilled TICKETS_HOST=${TICKETS_HOST} into .env"
+        fi
+    fi
+    if ! grep -q '^TALKS_HOST=.\+' .env 2>/dev/null; then
+        if [ -z "${DOMAIN:-}" ] || [ "$DOMAIN" = "localhost" ]; then
+            echo "WARNING: DOMAIN is not set or is 'localhost' — skipping TALKS_HOST backfill"
+        else
+            TALKS_HOST="${SUBDOMAIN_PREFIX:-}talks.${DOMAIN}"
+            if grep -q '^TALKS_HOST=' .env 2>/dev/null; then
+                sed -i "s|^TALKS_HOST=.*|TALKS_HOST=${TALKS_HOST}|" .env
+            else
+                echo "" >> .env
+                echo "TALKS_HOST=${TALKS_HOST}" >> .env
+            fi
+            echo "Backfilled TALKS_HOST=${TALKS_HOST} into .env"
+        fi
+    fi
+    # Backfill ENVIRONMENT if missing or empty (introduced in v2.x; all pre-existing stacks are prod)
+    if ! grep -q '^ENVIRONMENT=.\+' .env 2>/dev/null; then
+        ENVIRONMENT="prod"
+        if grep -q '^ENVIRONMENT=' .env 2>/dev/null; then
+            sed -i "s|^ENVIRONMENT=.*|ENVIRONMENT=${ENVIRONMENT}|" .env
+        else
+            echo "" >> .env
+            echo "ENVIRONMENT=${ENVIRONMENT}" >> .env
+        fi
+        echo "Backfilled ENVIRONMENT=${ENVIRONMENT} into .env"
+    fi
+fi
+
+# Validate ENVIRONMENT (catch typos early — refuse to continue with bad values)
+if [ -n "${ENVIRONMENT:-}" ] && [ "$ENVIRONMENT" != "prod" ] && [ "$ENVIRONMENT" != "dev" ]; then
+    echo "ERROR: ENVIRONMENT='${ENVIRONMENT}' is not a recognized value (expected 'prod' or 'dev')."
+    echo "  Fix the value in .env before running update."
+    exit 1
+fi
+
 # Parse optional tag overrides
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -70,7 +120,22 @@ install_cron_as_owner() {
 echo ""
 echo "Ensuring cron jobs are up-to-date..."
 install_cron_as_owner bash "$SCRIPT_DIR/cron.sh" --install
-install_cron_as_owner bash "$SCRIPT_DIR/backup.sh" --install-cron
+
+# Only install backup cron for production (dev environments skip daily backups)
+if [ "${ENVIRONMENT:-prod}" = "prod" ]; then
+    install_cron_as_owner bash "$SCRIPT_DIR/backup.sh" --install-cron
+else
+    echo "Skipping backup cron (${ENVIRONMENT} environment)"
+    # Remove any existing backup cron from the project owner's crontab
+    if install_cron_as_owner crontab -l 2>/dev/null | grep -qE "# tixtalk-backup|tixtalk-backup\.log"; then
+        echo "Removing stale backup cron entry..."
+        if [ "$(id -un)" = "$PROJECT_OWNER" ]; then
+            ( crontab -l 2>/dev/null | grep -v "# tixtalk-backup" | grep -v "tixtalk-backup\.log" || true ) | crontab -
+        else
+            sudo -u "$PROJECT_OWNER" bash -c '( crontab -l 2>/dev/null | grep -v "# tixtalk-backup" | grep -v "tixtalk-backup\.log" || true ) | crontab -'
+        fi
+    fi
+fi
 
 echo ""
 echo "=== Update complete ==="

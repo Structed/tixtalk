@@ -13,8 +13,8 @@ tixtalk provision    # Interactive wizard → fully running deployment
 | **Caddy** | `caddy:2-alpine` | Reverse proxy + automatic Let's Encrypt TLS |
 | **PostgreSQL** | `postgres:16-alpine` | Shared database (pretix + pretalx DBs) |
 | **Redis** | `redis:7-alpine` | Shared cache + Celery task queue |
-| **Pretix** | `pretix/standalone` | Ticketing at `tickets.yourdomain.com` |
-| **Pretalx** | `pretalx/standalone` | CfP/scheduling at `talks.yourdomain.com` |
+| **Pretix** | `pretix/standalone` | Ticketing (default: `tickets.<DOMAIN>`) |
+| **Pretalx** | `pretalx/standalone` | CfP/scheduling (default: `talks.<DOMAIN>`) |
 
 ## Architecture
 
@@ -64,9 +64,9 @@ The interactive wizard asks for your domain, SSH key, and Azure region, then:
 3. VM cloud-init installs Docker, clones repo, starts services, runs migrations, sets up periodic tasks, and configures daily backups
 4. Configures the `tixtalk` CLI to connect to the new server
 
-After ~5 minutes your apps are live. Point DNS and visit them:
-- **Pretix**: `https://tickets.yourdomain.com`
-- **Pretalx**: `https://talks.yourdomain.com`
+After ~5 minutes your apps are live:
+- **Pretix**: `https://<TICKETS_HOST>` (default: `tickets.<DOMAIN>`)
+- **Pretalx**: `https://<TALKS_HOST>` (default: `talks.<DOMAIN>`)
 
 ### Manual Pulumi setup (advanced)
 
@@ -104,14 +104,14 @@ Cloud-init runs on first boot (~5 min): installs Docker, starts services, runs m
 Point DNS to the VM IP from `pulumi stack output vmPublicIp`:
 
 ```
-tickets.yourdomain.com → <vmPublicIp>
-talks.yourdomain.com   → <vmPublicIp>
+<TICKETS_HOST> → <vmPublicIp>
+<TALKS_HOST>   → <vmPublicIp>
 ```
 
 If you configured Cloudflare, DNS records are created automatically.
 
-- **Pretix**: `https://tickets.yourdomain.com`
-- **Pretalx**: `https://talks.yourdomain.com`
+- **Pretix**: `https://<TICKETS_HOST>`
+- **Pretalx**: `https://<TALKS_HOST>`
 
 Both apps have web-based setup wizards on first visit.
 
@@ -123,8 +123,8 @@ After deployment, `pulumi stack output` displays:
 |--------|-------------|
 | `vmPublicIp` | VM public IP address |
 | `sshCommand` | Ready-to-use SSH command |
-| `pretixUrl` | `https://tickets.<domain>` |
-| `pretalxUrl` | `https://talks.<domain>` |
+| `pretixUrl` | `https://<TICKETS_HOST>` |
+| `pretalxUrl` | `https://<TALKS_HOST>` |
 
 ## Configuration Reference
 
@@ -140,7 +140,7 @@ All configuration is managed via Pulumi config (`pulumi config set <key> <value>
 | `azure-native:location` | No | `westeurope` | — | Azure region |
 | `tixtalk:cloudflareApiToken` | No | — | `CLOUDFLARE_API_TOKEN` | Cloudflare API token (use `--secret`) |
 | `tixtalk:cloudflareZoneId` | No | — | `CLOUDFLARE_ZONE_ID` | Cloudflare Zone ID |
-| `tixtalk:cloudflareDnsChallenge` | No | `false` | `CLOUDFLARE_DNS_CHALLENGE` | Use DNS challenge for TLS |
+| `tixtalk:cloudflareDnsChallenge` | No | `true` | `CLOUDFLARE_DNS_CHALLENGE` | Use DNS challenge for TLS |
 | `tixtalk:useAzureMail` | No | `true` | — | Use Azure Communication Services for email |
 | `tixtalk:acsUseCustomDomain` | No | `false` | — | Use custom domain for ACS (requires Cloudflare) |
 | `tixtalk:mailFrom` | No | `noreply@example.com` | `MAIL_FROM` | Email sender address |
@@ -223,6 +223,75 @@ When SSHed into the server directly, use `manage.sh`:
 ./manage.sh help         # All commands
 ```
 
+## Local Development
+
+Run the full stack on your local machine without Azure, DNS, or TLS. Requires a clone of this repository (the compose files and `.env.local` must be on disk).
+
+```bash
+# Start local dev environment (HTTP only)
+./manage.sh dev
+
+# Or via the CLI (from the repo directory):
+tixtalk dev up
+```
+
+This gives you:
+- **Pretix** at `http://localhost:8000`
+- **Pretalx** at `http://localhost:8001`
+- PostgreSQL + Redis running locally in containers
+- No domain, no TLS, no Cloudflare required
+- SMTP is not configured — email actions will be silently skipped
+
+The `.env.local` file comes with pre-filled dev credentials. Edit it to customize.
+
+To stop: `./manage.sh dev down` or `tixtalk dev down`
+
+### First-time local setup
+
+After starting for the first time, create admin accounts:
+
+```bash
+tixtalk dev superuser
+# Or: ./manage.sh dev exec pretix pretix createsuperuser
+```
+
+## Staging / Dev Environment (Azure)
+
+Deploy a separate Azure VM with prefixed subdomains (`dev-tickets.<DOMAIN>` / `dev-talks.<DOMAIN>`) that doesn't conflict with production.
+
+### Provision
+
+```bash
+tixtalk provision    # Select "dev" when prompted for environment
+```
+
+The dev environment automatically:
+- Uses `dev-` subdomain prefix (e.g., `dev-tickets.godotfest.com`)
+- Creates separate Azure resources (resource group, VM, IP)
+- Skips daily backup cron
+- Gets its own Pulumi stack
+
+### Test
+
+After cloud-init completes (~5 minutes):
+```bash
+tixtalk status       # Check services are running
+```
+
+### Teardown
+
+When done testing, destroy all dev resources:
+
+```bash
+tixtalk teardown     # Select "dev" stack — removes VM, DNS, IP, everything
+```
+
+> **Note:** `tixtalk teardown` requires a clone of this repository (it runs `pulumi destroy` from the `infra/` directory).
+
+### Migration note
+
+If you previously provisioned a `dev` stack, its DNS records (`tickets.<DOMAIN>`) may conflict with production. Destroy the old stack and re-provision to get the new prefixed records.
+
 ## Day-2 Operations
 
 ### Updating Containers
@@ -296,8 +365,8 @@ Runs at 3:00 AM daily. Backups older than 30 days are auto-deleted.
 
 Both apps are multi-tenant — create new events in the web UI each year. No infrastructure changes needed:
 
-- **Pretix**: `https://tickets.yourdomain.com/<organizer>/<year>/`
-- **Pretalx**: `https://talks.yourdomain.com/<event-slug>/`
+- **Pretix**: `https://<TICKETS_HOST>/<organizer>/<year>/`
+- **Pretalx**: `https://<TALKS_HOST>/<event-slug>/`
 
 ## Azure Communication Services (Email)
 
@@ -355,10 +424,10 @@ pulumi config set tixtalk:cloudflareZoneId YOUR_ZONE_ID
 
 ### TLS modes
 
-| Mode | `cloudflareDnsChallenge` | Cloudflare proxy | How it works |
+| Mode | `CLOUDFLARE_DNS_CHALLENGE` | Cloudflare proxy | How it works |
 |------|-------------------------|-----------------|--------------|
-| **HTTP challenge** (default) | `false` | Off (grey cloud) | Caddy validates via port 80. Simpler, standard image. |
-| **DNS challenge** | `true` | On (orange cloud) | Caddy validates via Cloudflare API. Hides server IP, full CDN. |
+| **HTTP challenge** | `false` | Off (grey cloud) | Caddy validates via port 80. Simpler, standard image. |
+| **DNS challenge** (Pulumi default) | `true` | On (orange cloud) | Caddy validates via Cloudflare API. Hides server IP, full CDN. |
 
 To use DNS challenge:
 ```bash
@@ -381,10 +450,15 @@ docker compose logs pretalx --tail 50
 ```
 
 ### TLS certificate not working
-Caddy auto-provisions Let's Encrypt certs. Ensure:
-- DNS A records are pointing to the server
-- Ports 80 and 443 are open (`sudo ufw status`)
-- Check Caddy logs: `docker compose logs caddy`
+For **HTTP challenge** mode (Caddy auto-provisions Let's Encrypt certs):
+- DNS A records must point to the server
+- Ports 80 and 443 must be open (`sudo ufw status`)
+
+For **DNS challenge** mode (Caddy uses internal TLS, Cloudflare handles edge):
+- Cloudflare SSL mode must be set to "Full"
+- Cloudflare API token and Zone ID must be configured
+
+Check Caddy logs: `docker compose logs caddy`
 
 ### Database connection issues
 ```bash
@@ -407,7 +481,7 @@ If you already have a VPS (or prefer not to use Pulumi), you can deploy directly
 
 ### Steps
 
-1. **Set up DNS** — Point `tickets.yourdomain.com` and `talks.yourdomain.com` to your server IP.
+1. **Set up DNS** — Point your hostnames (default: `tickets.<DOMAIN>` and `talks.<DOMAIN>`) to your server IP.
 
 2. **Clone and configure:**
 
@@ -440,7 +514,7 @@ docker compose exec pretalx pretalx migrate
 docker compose exec pretalx pretalx rebuild
 ```
 
-5. **Access your apps** at `https://tickets.yourdomain.com` and `https://talks.yourdomain.com`.
+5. **Access your apps** at `https://<TICKETS_HOST>` and `https://<TALKS_HOST>` (defaults to `tickets.<DOMAIN>` and `talks.<DOMAIN>`).
 
 See [Configuration Reference](#configuration-reference) for all `.env` variables (the `.env Equivalent` column).
 
@@ -449,9 +523,14 @@ See [Configuration Reference](#configuration-reference) for all `.env` variables
 ### Pulumi (recommended)
 
 ```bash
+tixtalk teardown     # Interactive — select stack (dev or prod)
+
+# Or manually (requires repo checkout):
 cd infra
 pulumi destroy    # Removes all Azure resources
 ```
+
+> **Note:** `tixtalk teardown` requires a local clone of this repository (it runs Pulumi from the `infra/` directory).
 
 ### Manual VPS
 

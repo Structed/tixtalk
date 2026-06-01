@@ -1,0 +1,18 @@
+# Local development: HTTP-only, port-based routing, no TLS
+{
+	auto_https off
+}
+
+:8000 {
+	reverse_proxy pretix:80
+}
+
+:8001 {
+	handle /media/* {
+		root * /srv/pretalx
+		file_server
+	}
+	handle {
+		reverse_proxy pretalx:80
+	}
+}

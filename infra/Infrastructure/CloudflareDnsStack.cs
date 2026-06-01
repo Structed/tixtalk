@@ -8,6 +8,7 @@ public record CloudflareDnsArgs
 {
     public required string Prefix { get; init; }
     public required string Domain { get; init; }
+    public string SubdomainPrefix { get; init; } = "";
     public required string CloudflareApiToken { get; init; }
     public required string CloudflareZoneId { get; init; }
     public bool Proxied { get; init; } = false;
@@ -58,11 +59,11 @@ public static class CloudflareDnsStack
 
         var opts = new CustomResourceOptions { Provider = provider };
 
-        // A records for tickets.{domain} and talks.{domain}
+        // A records for {prefix}tickets.{domain} and {prefix}talks.{domain}
         _ = new DnsRecord($"{args.Prefix}-dns-tickets", new DnsRecordArgs
         {
             ZoneId = args.CloudflareZoneId,
-            Name = $"tickets.{args.Domain}",
+            Name = $"{args.SubdomainPrefix}tickets.{args.Domain}",
             Type = "A",
             Content = args.VmPublicIp,
             Ttl = 1, // Auto TTL
@@ -73,7 +74,7 @@ public static class CloudflareDnsStack
         _ = new DnsRecord($"{args.Prefix}-dns-talks", new DnsRecordArgs
         {
             ZoneId = args.CloudflareZoneId,
-            Name = $"talks.{args.Domain}",
+            Name = $"{args.SubdomainPrefix}talks.{args.Domain}",
             Type = "A",
             Content = args.VmPublicIp,
             Ttl = 1,

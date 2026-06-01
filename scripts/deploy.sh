@@ -23,9 +23,31 @@ fi
 load_env
 
 # Validate required config
-if [ -z "${DOMAIN:-}" ] || [ "$DOMAIN" = "yourdomain.com" ]; then
-    echo "ERROR: Set DOMAIN in .env to your actual domain."
+if [ -z "${DOMAIN:-}" ] || [ "$DOMAIN" = "yourdomain.com" ] || [ "$DOMAIN" = "localhost" ]; then
+    echo "ERROR: Set DOMAIN in .env to your actual domain (not 'localhost' or 'yourdomain.com')."
     exit 1
+fi
+
+# Compute TICKETS_HOST / TALKS_HOST if not set (backward compat)
+if [ -z "${TICKETS_HOST:-}" ]; then
+    TICKETS_HOST="${SUBDOMAIN_PREFIX:-}tickets.${DOMAIN}"
+    # Update existing blank entry or append
+    if grep -q '^TICKETS_HOST=' .env 2>/dev/null; then
+        sed -i "s|^TICKETS_HOST=.*|TICKETS_HOST=${TICKETS_HOST}|" .env
+    else
+        echo "TICKETS_HOST=${TICKETS_HOST}" >> .env
+    fi
+    echo "Computed TICKETS_HOST=${TICKETS_HOST}"
+fi
+if [ -z "${TALKS_HOST:-}" ]; then
+    TALKS_HOST="${SUBDOMAIN_PREFIX:-}talks.${DOMAIN}"
+    # Update existing blank entry or append
+    if grep -q '^TALKS_HOST=' .env 2>/dev/null; then
+        sed -i "s|^TALKS_HOST=.*|TALKS_HOST=${TALKS_HOST}|" .env
+    else
+        echo "TALKS_HOST=${TALKS_HOST}" >> .env
+    fi
+    echo "Computed TALKS_HOST=${TALKS_HOST}"
 fi
 
 # Generate secrets if empty
@@ -58,8 +80,8 @@ if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
     echo ""
 else
     echo "No CLOUDFLARE_API_TOKEN set — make sure DNS records exist:"
-    echo "  tickets.${DOMAIN} → $(curl -s -4 ifconfig.me 2>/dev/null || echo '<server-ip>')"
-    echo "  talks.${DOMAIN}   → $(curl -s -4 ifconfig.me 2>/dev/null || echo '<server-ip>')"
+    echo "  ${TICKETS_HOST} → $(curl -s -4 ifconfig.me 2>/dev/null || echo '<server-ip>')"
+    echo "  ${TALKS_HOST}   → $(curl -s -4 ifconfig.me 2>/dev/null || echo '<server-ip>')"
     echo ""
 fi
 
@@ -79,8 +101,8 @@ $COMPOSE_CMD up -d
 echo ""
 echo "=== Deployment complete ==="
 echo ""
-echo "  Pretix:  https://tickets.${DOMAIN}"
-echo "  Pretalx: https://talks.${DOMAIN}"
+echo "  Pretix:  https://${TICKETS_HOST}"
+echo "  Pretalx: https://${TALKS_HOST}"
 echo ""
 echo "First-time setup:"
 echo "  1. Wait ~30s for services to initialize"

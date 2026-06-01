@@ -18,12 +18,14 @@ public static class Menu
                     .Title("[bold]What would you like to do?[/]")
                     .HighlightStyle("green")
                     .AddChoices(
+                        "Local development",
                         "Provision new server (Azure)",
                         "Connect to existing server",
                         "Quit"));
 
             return setupChoice switch
             {
+                "Local development" => Dev.Run([]),
                 "Provision new server (Azure)" => Provision.Run(),
                 "Connect to existing server" => ConnectAndContinue(config, remote),
                 _ => 0,
@@ -39,8 +41,9 @@ public static class Menu
 
         if (domain != null)
         {
-            AnsiConsole.MarkupLine($"  [green]Pretix:[/]  https://tickets.{domain}");
-            AnsiConsole.MarkupLine($"  [green]Pretalx:[/] https://talks.{domain}");
+            var (ticketsHost, talksHost) = remote.GetRemoteHosts(domain);
+            AnsiConsole.MarkupLine($"  [green]Pretix:[/]  https://{ticketsHost}");
+            AnsiConsole.MarkupLine($"  [green]Pretalx:[/] https://{talksHost}");
             AnsiConsole.WriteLine();
         }
 
@@ -65,6 +68,10 @@ public static class Menu
                     "Update DNS records",
                     "Stop services",
                     "Start services",
+                })
+                .AddChoiceGroup("Local", new[]
+                {
+                    "Local development",
                 })
                 .AddChoiceGroup("Azure SSH Access", new[]
                 {
@@ -101,6 +108,7 @@ public static class Menu
             "Update DNS records" => remote.RunCommand("dns"),
             "Stop services" => remote.RunCommand("stop"),
             "Start services" => remote.RunCommand("start"),
+            "Local development" => Dev.Run([]),
             "Open SSH access" => SshAccess.Open(config),
             "Close SSH access" => SshAccess.Close(config),
             "SSH access status" => SshAccess.Status(config),

@@ -58,13 +58,16 @@ services:
   pretix:
     image: pretix/standalone:${PRETIX_IMAGE_TAG:-stable}
     restart: unless-stopped
+    # Fix: /pretix home dir is 700 in the image, which blocks nginx (www-data)
+    # from serving static files at /pretix/src/pretix/static.dist/
+    entrypoint: ["/bin/bash", "-c", "chmod o+rx /pretix && exec /usr/local/bin/pretix all"]
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     environment:
-      PRETIX_PRETIX_URL: https://tickets.${DOMAIN}
+      PRETIX_PRETIX_URL: https://${TICKETS_HOST:-localhost}
       PRETIX_PRETIX_DATADIR: /data
       PRETIX_PRETIX_TRUST_X_FORWARDED_FOR: "on"
       PRETIX_PRETIX_TRUST_X_FORWARDED_PROTO: "on"
@@ -102,7 +105,7 @@ services:
       redis:
         condition: service_healthy
     environment:
-      PRETALX_SITE_URL: https://talks.${DOMAIN}
+      PRETALX_SITE_URL: https://${TALKS_HOST:-localhost}
       PRETALX_FILESYSTEM_DATA: /data
 
       # Database (pretalx uses PRETALX_DB_* env vars, NOT DATABASE_URL)
